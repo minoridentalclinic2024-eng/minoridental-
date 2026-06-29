@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1e4d7b">
+<title>みのり歯科 衛生士管理システム</title>
+<style>
+/* ===== APP HEADER & TABS ===== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Helvetica Neue', Arial, sans-serif; background: #f0f4f8; color: #1e293b; min-height: 100vh; -webkit-text-size-adjust: 100%; }
+.app-header { background: #1e4d7b; color: #fff; padding: 12px 20px; }
+.app-header h1 { font-size: 16px; font-weight: 700; }
+.app-header .sub { font-size: 11px; opacity: 0.75; margin-top: 2px; }
+.app-tabs { display: flex; background: #163d62; position: sticky; top: 0; z-index: 50; }
+.app-tab-btn { flex: 1; padding: 14px 6px 12px; border: none; background: transparent; color: rgba(255,255,255,0.55); font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; line-height: 1.3; min-height: 52px; -webkit-tap-highlight-color: transparent; }
+.app-tab-btn.active { color: #fff; background: rgba(255,255,255,0.1); border-bottom-color: #38bdf8; }
+.app-tab-btn:hover:not(.active) { color: rgba(255,255,255,0.85); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ===== MOBILE HELPERS ===== */
+@media (max-width: 480px) {
+  .app-header { padding: 10px 16px; }
+  .app-header h1 { font-size: 14px; }
+}
+input[type="number"], input[type="time"], input[type="month"], select {
+  font-size: 16px !important; /* iOSでズームを防ぐ */
+}
+
+/* ===== PIN LOCK ===== */
+.pin-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 500; display: flex; align-items: center; justify-content: center; }
+.pin-box { background: #fff; border-radius: 20px; padding: 32px 28px; width: 320px; max-width: 92vw; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
+.pin-icon { font-size: 40px; margin-bottom: 12px; }
+.pin-title { font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+.pin-sub { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+.pin-dots { display: flex; justify-content: center; gap: 12px; margin-bottom: 24px; }
+.pin-dot { width: 14px; height: 14px; border-radius: 50%; background: #e2e8f0; transition: background 0.15s; }
+.pin-dot.filled { background: #1e4d7b; }
+.pin-numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pin-key { padding: 16px; border: 2px solid #e2e8f0; border-radius: 12px; background: #f8fafc; font-size: 20px; font-weight: 600; color: #1e293b; cursor: pointer; transition: background 0.1s; user-select: none; }
+.pin-key:active { background: #dbeafe; border-color: #93c5fd; }
+.pin-key.del { font-size: 16px; color: #ef4444; border-color: #fee2e2; background: #fff; }
+.pin-key.zero { grid-column: 2; }
+.pin-error { color: #ef4444; font-size: 13px; margin-top: 14px; min-height: 18px; font-weight: 600; }
+.pin-setup-link { font-size: 12px; color: #94a3b8; margin-top: 16px; cursor: pointer; text-decoration: underline; }
+@keyframes pinShake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+
+/* ===== TIMECARD CSS ===== */
+#tc-tab { background: #f0f4f8; }
+#tc-tab .tc-setup { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; padding: 24px; }
+#tc-tab .tc-setup h2 { font-size: 22px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+#tc-tab .tc-setup p { font-size: 14px; color: #64748b; margin-bottom: 32px; }
+#tc-tab .name-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 320px; }
+#tc-tab .name-btn { padding: 18px; border: 2px solid #e2e8f0; border-radius: 12px; background: #fff; font-size: 18px; font-weight: 600; color: #334155; cursor: pointer; min-height: 56px; -webkit-tap-highlight-color: transparent; }
+#tc-tab .tc-main { display: none; }
+#tc-tab .tc-header { background: #0ea5e9; color: #fff; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
+#tc-tab .tc-header-name { font-size: 20px; font-weight: 700; }
+#tc-tab .tc-header-sub { font-size: 13px; opacity: 0.85; }
+#tc-tab .change-btn { background: rgba(255,255,255,0.2); border: none; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+#tc-tab .card { background: #fff; border-radius: 16px; margin: 16px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+#tc-tab .today-date { font-size: 15px; color: #64748b; margin-bottom: 4px; }
+#tc-tab .today-status { font-size: 13px; color: #94a3b8; margin-bottom: 16px; min-height: 20px; }
+#tc-tab .today-status.active { color: #0ea5e9; font-weight: 600; }
+#tc-tab .editing-banner { background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; color: #92400e; display: none; justify-content: space-between; align-items: center; }
+#tc-tab .facility-row { margin-bottom: 16px; }
+#tc-tab .facility-label { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+#tc-tab .fac-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+#tc-tab .fac-btn { padding: 10px 16px; border: 2px solid #e2e8f0; border-radius: 20px; background: #fff; font-size: 14px; color: #334155; cursor: pointer; min-height: 44px; -webkit-tap-highlight-color: transparent; }
+#tc-tab .fac-btn.selected { border-color: #0ea5e9; background: #e0f2fe; color: #0284c7; font-weight: 600; }
+#tc-tab .time-row { display: flex; gap: 12px; margin-bottom: 16px; }
+#tc-tab .time-field { flex: 1; }
+#tc-tab .time-field label { font-size: 12px; color: #64748b; display: block; margin-bottom: 4px; }
+#tc-tab .time-field input[type="time"] { width: 100%; padding: 10px 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 18px; color: #1e293b; background: #fff; outline: none; }
+#tc-tab .time-field input[type="time"]:focus { border-color: #0ea5e9; }
+#tc-tab .break-row { margin-bottom: 16px; }
+#tc-tab .break-label { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+#tc-tab .break-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+#tc-tab .break-preset { padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 20px; background: #fff; font-size: 14px; color: #334155; cursor: pointer; min-height: 44px; -webkit-tap-highlight-color: transparent; }
+#tc-tab .break-preset.selected { border-color: #f59e0b; background: #fef3c7; color: #b45309; font-weight: 600; }
+#tc-tab .break-custom-wrap { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+#tc-tab .break-custom-wrap label { font-size: 12px; color: #64748b; }
+#tc-tab .break-custom-wrap input { width: 64px; padding: 6px 8px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; text-align: center; }
+#tc-tab .break-custom-wrap span { font-size: 13px; color: #64748b; }
+#tc-tab .punch-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+#tc-tab .punch-in { padding: 18px 16px; border: none; border-radius: 12px; background: #0ea5e9; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; min-height: 56px; -webkit-tap-highlight-color: transparent; }
+#tc-tab .punch-out { padding: 18px 16px; border: none; border-radius: 12px; background: #f1f5f9; color: #475569; font-size: 16px; font-weight: 700; cursor: pointer; min-height: 56px; -webkit-tap-highlight-color: transparent; }
+#tc-tab .punch-out.ready { background: #10b981; color: #fff; }
+#tc-tab .save-btn { width: 100%; padding: 14px; border: none; border-radius: 12px; background: #6366f1; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+#tc-tab .tc-section-title { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+#tc-tab .tc-month-nav { display: flex; align-items: center; gap: 10px; }
+#tc-tab .tc-month-nav button { background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 10px; font-size: 14px; cursor: pointer; color: #334155; }
+#tc-tab .tc-month-label { font-size: 15px; font-weight: 600; color: #334155; }
+#tc-tab .record-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; gap: 8px; }
+#tc-tab .record-item:last-child { border-bottom: none; }
+#tc-tab .record-date { width: 60px; font-size: 13px; color: #64748b; flex-shrink: 0; }
+#tc-tab .record-fac { font-size: 13px; color: #0ea5e9; font-weight: 600; min-width: 76px; }
+#tc-tab .record-time { font-size: 13px; color: #334155; flex: 1; }
+#tc-tab .record-hours { font-size: 14px; font-weight: 700; color: #0f172a; flex-shrink: 0; }
+#tc-tab .record-edit { background: none; border: none; color: #94a3b8; font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; }
+#tc-tab .record-del { background: none; border: none; color: #cbd5e1; font-size: 18px; cursor: pointer; padding: 4px; flex-shrink: 0; }
+#tc-tab .empty-msg { text-align: center; color: #94a3b8; font-size: 14px; padding: 24px 0; }
+#tc-tab .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+#tc-tab .summary-item { background: #f8fafc; border-radius: 10px; padding: 12px 14px; }
+#tc-tab .summary-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+#tc-tab .summary-value { font-size: 22px; font-weight: 700; color: #0f172a; }
+#tc-tab .summary-unit { font-size: 13px; color: #64748b; }
+#tc-tab .fac-breakdown { margin-top: 12px; }
+#tc-tab .fac-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+#tc-tab .fac-row:last-child { border-bottom: none; }
+#tc-tab .fac-row-name { color: #475569; }
+#tc-tab .fac-row-val { font-weight: 600; color: #1e293b; }
+#tc-tab .tc-export-btn { width: 100%; padding: 14px; border: 2px solid #0ea5e9; border-radius: 12px; background: #fff; color: #0284c7; font-size: 15px; font-weight: 700; cursor: pointer; }
+#tc-tab .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 9999; white-space: nowrap; }
+#tc-tab .toast.show { opacity: 1; }
+
+/* ===== SHIFT MANAGEMENT CSS ===== */
+:root {
+  --blue-dark: #1e4d7b; --blue-mid: #2e7bc4; --blue-light: #dbeafe;
+  --green: #15803d; --green-light: #dcfce7; --red: #b91c1c; --red-light: #fee2e2;
+  --orange-light: #fff7ed; --orange: #c2410c;
+  --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
+  --gray-400: #9ca3af; --gray-600: #4b5563; --gray-800: #1f2937; --yellow: #fef9c3;
+}
+#sh-tab { font-size: 13px; }
+#sh-tab .month-nav { background: var(--blue-mid); color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#sh-tab .month-nav button { background: rgba(255,255,255,0.2); border: none; color: #fff; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 14px; min-height: 40px; -webkit-tap-highlight-color: transparent; }
+#sh-tab .month-nav .month-label { font-size: 18px; font-weight: 700; min-width: 110px; text-align: center; }
+#sh-tab .month-nav .export-btn { margin-left: 0; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #fff; font-size: 12px; min-height: 40px; }
+#sh-tab .month-nav .export-btn + .export-btn { margin-left: 0; }
+@media (max-width: 480px) {
+  #sh-tab .month-nav { padding: 8px 12px; gap: 8px; }
+  #sh-tab .month-nav .export-btn { font-size: 11px; padding: 7px 9px; }
+}
+#sh-tab .slack-draft { background: #1a1d23; color: #e2e8f0; border-radius: 8px; padding: 14px; font-size: 12px; line-height: 1.7; white-space: pre-wrap; max-height: 340px; overflow-y: auto; font-family: 'Courier New', monospace; margin-top: 8px; }
+#sh-tab .copy-btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 6px 16px; cursor: pointer; font-size: 12px; margin-top: 8px; }
+#sh-tab .settings-bar { background: #fff; border-bottom: 1px solid var(--gray-200); padding: 10px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+#sh-tab .settings-title { font-size: 12px; font-weight: 600; color: var(--gray-600); }
+#sh-tab .staff-hours-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+#sh-tab .staff-hour-item { display: flex; align-items: center; gap: 6px; background: var(--blue-light); border-radius: 8px; padding: 4px 10px; }
+#sh-tab .staff-hour-item label { font-size: 12px; font-weight: 600; color: var(--blue-dark); }
+#sh-tab .staff-hour-item select { border: 1px solid var(--gray-200); border-radius: 4px; padding: 2px 4px; font-size: 12px; background: #fff; color: var(--blue-dark); font-weight: 600; }
+#sh-tab .limit-badge { background: var(--green-light); color: var(--green); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 700; }
+#sh-tab .table-wrapper { overflow-x: auto; padding: 16px 20px; }
+#sh-tab table { border-collapse: collapse; min-width: 100%; }
+#sh-tab th, #sh-tab td { border: 1px solid var(--gray-200); padding: 0; }
+#sh-tab th:first-child, #sh-tab td:first-child { position: sticky; left: 0; z-index: 2; min-width: 90px; background: #fff; }
+#sh-tab thead th:first-child { z-index: 3; }
+#sh-tab thead tr:first-child th { background: var(--blue-dark); color: #fff; font-weight: 700; font-size: 12px; text-align: center; padding: 8px 6px; white-space: nowrap; }
+#sh-tab thead tr:first-child th.sat { background: #1565c0; }
+#sh-tab thead tr:first-child th.sun { background: #b71c1c; }
+#sh-tab thead tr:first-child th:first-child { text-align: left; padding-left: 10px; }
+#sh-tab thead tr:nth-child(2) th { background: var(--gray-100); color: var(--gray-600); font-size: 11px; text-align: center; padding: 3px 0; }
+#sh-tab thead tr:nth-child(2) th.sat { color: #1565c0; font-weight: 700; background: #dbeafe; }
+#sh-tab thead tr:nth-child(2) th.sun { color: #b71c1c; font-weight: 700; background: #fee2e2; }
+#sh-tab .staff-col { background: var(--blue-dark) !important; color: #fff; font-weight: 700; font-size: 13px; text-align: center; padding: 8px 4px; }
+#sh-tab .shift-cell { cursor: pointer; min-width: 72px; text-align: center; vertical-align: top; position: relative; }
+#sh-tab .shift-cell.empty { background: var(--gray-50); }
+#sh-tab .shift-cell.weekend { background: var(--gray-100); cursor: default; }
+#sh-tab .shift-cell.has-data { background: #fff; }
+#sh-tab .shift-cell.over-limit { background: var(--red-light); }
+#sh-tab .shift-cell.over-limit .cell-patients { color: var(--red); font-weight: 700; }
+#sh-tab .cell-inner { padding: 4px 3px; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+#sh-tab .cell-facility { font-size: 10px; font-weight: 600; color: var(--blue-dark); background: var(--blue-light); border-radius: 4px; padding: 1px 5px; max-width: 68px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sh-tab .cell-hours { font-size: 10px; color: var(--gray-600); }
+#sh-tab .cell-limit { font-size: 10px; color: var(--green); font-weight: 600; }
+#sh-tab .cell-patients { font-size: 13px; font-weight: 700; color: var(--gray-800); }
+#sh-tab .cell-warn { font-size: 9px; color: var(--red); font-weight: 700; }
+#sh-tab .cell-off { font-size: 11px; color: var(--gray-400); }
+#sh-tab .total-col { background: var(--green-light) !important; font-weight: 700; color: var(--green); text-align: center; padding: 4px; min-width: 52px; }
+#sh-tab .summary-section { padding: 16px 20px; }
+#sh-tab .summary-title { font-size: 13px; font-weight: 700; color: var(--gray-800); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--blue-mid); }
+#sh-tab .fac-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+#sh-tab .fac-card { background: #fff; border: 1px solid var(--gray-200); border-radius: 10px; padding: 14px; }
+#sh-tab .fac-card-name { font-size: 14px; font-weight: 700; color: var(--blue-dark); margin-bottom: 6px; }
+#sh-tab .fac-card-stat { font-size: 12px; color: var(--gray-600); display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--gray-100); }
+#sh-tab .fac-card-stat:last-child { border-bottom: none; }
+#sh-tab .fac-card-stat strong { color: var(--gray-800); }
+#sh-tab .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: flex-end; justify-content: center; }
+#sh-tab .modal-overlay.open { display: flex; }
+#sh-tab .modal { background: #fff; border-radius: 20px 20px 0 0; padding: 24px 24px 36px; width: 100%; max-width: 480px; box-shadow: 0 -4px 30px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
+@media (min-width: 600px) {
+  #sh-tab .modal-overlay { align-items: center; }
+  #sh-tab .modal { border-radius: 14px; padding: 24px; width: 360px; max-height: unset; }
+}
+#sh-tab .modal select, #sh-tab .modal input[type=number] { padding: 12px 14px; font-size: 16px; }
+#sh-tab .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+#sh-tab .modal-title { font-size: 16px; font-weight: 700; color: var(--blue-dark); }
+#sh-tab .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--gray-400); }
+#sh-tab .modal label { display: block; font-size: 12px; font-weight: 600; color: var(--gray-600); margin-bottom: 4px; margin-top: 14px; }
+#sh-tab .modal label:first-of-type { margin-top: 0; }
+#sh-tab .modal select, #sh-tab .modal input[type=number] { width: 100%; border: 1px solid var(--gray-200); border-radius: 8px; padding: 9px 12px; font-size: 14px; color: var(--gray-800); background: var(--gray-50); }
+#sh-tab .limit-info { background: var(--green-light); border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 13px; color: var(--green); font-weight: 600; text-align: center; }
+#sh-tab .limit-info.warn { background: var(--red-light); color: var(--red); }
+#sh-tab .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+#sh-tab .btn { border: none; border-radius: 10px; padding: 14px 16px; font-size: 14px; font-weight: 600; cursor: pointer; flex: 1; min-height: 48px; -webkit-tap-highlight-color: transparent; }
+#sh-tab .btn-primary { background: var(--blue-mid); color: #fff; }
+#sh-tab .btn-danger { background: var(--red-light); color: var(--red); }
+#sh-tab .btn-secondary { background: var(--gray-100); color: var(--gray-600); }
+#sh-tab .legend { display: flex; gap: 14px; align-items: center; padding: 8px 20px 4px; flex-wrap: wrap; }
+#sh-tab .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--gray-600); }
+#sh-tab .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+#sh-tab .capacity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 16px; }
+#sh-tab .capacity-card { background: #fff; border: 1px solid var(--gray-200); border-radius: 10px; padding: 14px; }
+#sh-tab .capacity-card-name { font-size: 13px; font-weight: 700; color: var(--blue-dark); margin-bottom: 10px; }
+#sh-tab .capacity-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: var(--gray-600); }
+#sh-tab .capacity-row input[type=number] { width: 70px; border: 1px solid var(--gray-200); border-radius: 6px; padding: 4px 8px; font-size: 13px; text-align: center; }
+#sh-tab .capacity-result { margin-top: 10px; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+#sh-tab .capacity-result.ok { background: var(--green-light); color: var(--green); }
+#sh-tab .capacity-result.warn { background: var(--orange-light); color: var(--orange); }
+#sh-tab .capacity-result.danger { background: var(--red-light); color: var(--red); }
+#sh-tab .import-area { width: 100%; height: 200px; border: 1px solid var(--gray-200); border-radius: 8px; padding: 10px; font-size: 11px; font-family: monospace; resize: vertical; background: var(--gray-50); }
+#sh-tab .import-instructions { background: var(--blue-light); border-radius: 8px; padding: 12px; font-size: 11px; color: var(--blue-dark); margin-bottom: 12px; line-height: 1.6; }
+#sh-tab .import-instructions code { background: rgba(0,0,0,0.08); border-radius: 3px; padding: 1px 4px; font-family: monospace; }
+
+/* ===== PAYROLL CSS ===== */
+#pay-tab { }
+#payContent { padding: 16px; }
+#pay-tab .pay-card { background: #fff; border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+#pay-tab .pay-title { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 14px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+#pay-tab .pay-month-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+#pay-tab .pay-month-row label { font-size: 13px; color: #64748b; }
+#pay-tab .pay-month-row input { padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+#pay-tab .bonus-notice { background: #fef9c3; border: 1px solid #fde047; border-radius: 8px; padding: 9px 14px; font-size: 13px; color: #854d0e; margin-bottom: 12px; display: none; }
+#pay-tab .staff-import-grid { display: grid; gap: 10px; }
+#pay-tab .staff-import-row { background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; }
+#pay-tab .sir-top { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-wrap: wrap; }
+#pay-tab .sir-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; padding: 0 14px 12px; border-top: 1px solid #e2e8f0; }
+#pay-tab .staff-import-name { font-size: 15px; font-weight: 700; color: #1e293b; min-width: 52px; }
+#pay-tab .import-file-btn { padding: 7px 14px; border: 2px solid #0ea5e9; border-radius: 8px; background: #fff; color: #0284c7; font-size: 13px; font-weight: 600; cursor: pointer; }
+#pay-tab .import-status { font-size: 12px; color: #64748b; flex: 1; }
+#pay-tab .import-status.loaded { color: #15803d; font-weight: 600; }
+#pay-tab .pay-field { display: flex; align-items: center; gap: 5px; }
+#pay-tab .pay-field label { font-size: 11px; color: #64748b; white-space: nowrap; }
+#pay-tab .pay-field input { width: 80px; padding: 5px 7px; border: 2px solid #e2e8f0; border-radius: 7px; font-size: 13px; text-align: right; }
+#pay-tab .pay-field span { font-size: 11px; color: #64748b; }
+#pay-tab .pay-field.bonus-field { display: none; }
+#pay-tab .pay-table-wrap { overflow-x: auto; }
+#pay-tab .pay-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 700px; }
+#pay-tab .pay-table th { background: #1e4d7b; color: #fff; padding: 9px 10px; text-align: left; font-size: 11px; white-space: nowrap; }
+#pay-tab .pay-table th.right { text-align: right; }
+#pay-tab .pay-table td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; font-size: 12px; }
+#pay-tab .pay-table tr:hover td { background: #f8fafc; }
+#pay-tab .pay-table .right { text-align: right; }
+#pay-tab .pay-table .amount { font-weight: 700; color: #1e4d7b; text-align: right; }
+#pay-tab .pay-table .deduct { color: #ef4444; text-align: right; }
+#pay-tab .pay-table .net { font-weight: 700; color: #0f172a; text-align: right; }
+#pay-tab .pay-table tfoot td { background: #f0f4f8; font-weight: 700; border-top: 2px solid #e2e8f0; }
+#pay-tab .pay-export-btn { width: 100%; padding: 14px; border: none; border-radius: 12px; background: #1e4d7b; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+#pay-tab .pay-empty { text-align: center; color: #94a3b8; padding: 32px; font-size: 14px; }
+#pay-tab .fac-detail { font-size: 10px; color: #64748b; margin-top: 2px; }
+#pay-tab .wtax-auto { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+#pay-tab .section-label { font-size: 11px; font-weight: 700; color: #64748b; margin: 10px 0 4px; padding: 0 14px; }
+#pay-tab .tax-hint { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #0369a1; margin-bottom: 14px; line-height: 1.6; }
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 600px) {
+  /* Timecard: larger card padding, bigger record items */
+  #tc-tab .card { margin: 12px; padding: 16px; }
+  #tc-tab .record-item { padding: 12px 0; gap: 6px; }
+  #tc-tab .record-edit, #tc-tab .record-del { padding: 8px; }
+  #tc-tab .tc-export-btn { font-size: 14px; }
+  #tc-tab .break-custom-wrap input { width: 72px; padding: 8px; font-size: 16px; }
+
+  /* Shift: settings bar compact */
+  #sh-tab .settings-bar { padding: 8px 12px; gap: 10px; }
+  #sh-tab .staff-hours-grid { gap: 8px; }
+  #sh-tab .staff-hour-item { padding: 6px 10px; }
+  #sh-tab .staff-hour-item select { font-size: 14px; padding: 4px 6px; }
+  #sh-tab .summary-section { padding: 12px; }
+  #sh-tab .fac-summary-grid { grid-template-columns: 1fr; }
+  #sh-tab .capacity-grid { grid-template-columns: 1fr; }
+  #sh-tab .capacity-row input[type=number] { width: 80px; padding: 8px; font-size: 16px !important; }
+  #sh-tab .table-wrapper { padding: 8px 0; }
+
+  /* Payroll: full-width fields */
+  #payContent { padding: 10px; }
+  #pay-tab .pay-card { padding: 14px; }
+  #pay-tab .sir-top { gap: 8px; }
+  #pay-tab .sir-settings { grid-template-columns: 1fr 1fr; }
+  #pay-tab .pay-field input { width: 90px; font-size: 14px; }
+  #pay-tab .import-file-btn { font-size: 12px; padding: 8px 10px; min-height: 40px; }
+  #pay-tab .pay-export-btn { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- APP HEADER -->
+<div class="app-header">
+  <div>
+    <h1>茂原みのり歯科クリニック</h1>
+    <div class="sub">訪問歯科 衛生士管理システム</div>
+  </div>
+</div>
+
+<!-- TAB NAV -->
+<div class="app-tabs">
+  <button class="app-tab-btn active" data-tab="timecard" onclick="switchTab('timecard')">⏱ タイムカード</button>
+  <button class="app-tab-btn" data-tab="shift" onclick="switchTab('shift')">📅 シフト管理</button>
+  <button class="app-tab-btn" data-tab="payroll" onclick="switchTab('payroll')">💴 給与計算</button>
+</div>
+
+<!-- ===== TIMECARD TAB ===== -->
+<div id="tc-tab" class="tab-panel active">
+
+  <div class="tc-setup" id="tcSetupScreen">
+    <h2>👤 名前を選んでください</h2>
+    <p>最初に1回だけ設定します</p>
+    <div class="name-grid" id="tcNameGrid"></div>
+  </div>
+
+  <div class="tc-main" id="tcMainScreen">
+    <div class="tc-header">
+      <div>
+        <div class="tc-header-name" id="tcHeaderName"></div>
+        <div class="tc-header-sub" id="tcHeaderDate"></div>
+      </div>
+      <button class="change-btn" onclick="tcChangeName()">変更</button>
+    </div>
+
+    <div class="card">
+      <div class="today-date" id="tcTodayLabel"></div>
+      <div class="editing-banner" id="tcEditBanner">
+        <span>✏️ <span id="tcEditDateLabel"></span> の記録を編集中</span>
+        <button onclick="tcCancelEdit()" style="background:none;border:1px solid #f59e0b;border-radius:6px;padding:3px 10px;font-size:12px;color:#92400e;cursor:pointer;">キャンセル</button>
+      </div>
+      <div class="today-status" id="tcTodayStatus">未打刻</div>
+
+      <div class="facility-row">
+        <div class="facility-label">訪問施設</div>
+        <div class="fac-btns" id="tcFacBtns"></div>
+      </div>
+
+      <div class="time-row">
+        <div class="time-field">
+          <label>出勤時刻</label>
+          <input type="time" id="tcInTime" oninput="tcUpdateStatus()" />
+        </div>
+        <div class="time-field">
+          <label>退勤時刻</label>
+          <input type="time" id="tcOutTime" oninput="tcUpdateStatus()" />
+        </div>
+      </div>
+
+      <div class="break-row">
+        <div class="break-label">☕ 休憩時間</div>
+        <div class="break-presets">
+          <button class="break-preset" data-min="0" onclick="tcSelectBreak(0)">なし</button>
+          <button class="break-preset" data-min="30" onclick="tcSelectBreak(30)">30分</button>
+          <button class="break-preset" data-min="45" onclick="tcSelectBreak(45)">45分</button>
+          <button class="break-preset" data-min="60" onclick="tcSelectBreak(60)">1時間</button>
+          <button class="break-preset selected" data-min="90" onclick="tcSelectBreak(90)">1時間半</button>
+        </div>
+        <div class="break-custom-wrap">
+          <label>その他：</label>
+          <input type="number" id="tcBreakCustom" min="0" max="240" step="5" value="90" oninput="tcBreakCustomInput()" />
+          <span>分</span>
+        </div>
+      </div>
+
+      <div class="punch-btns">
+        <button class="punch-in" onclick="tcPunchIn()">🟢 出勤</button>
+        <button class="punch-out" id="tcPunchOutBtn" onclick="tcPunchOut()">🔴 退勤</button>
+      </div>
+      <button class="save-btn" onclick="tcSaveRecord()">💾 この日の記録を保存</button>
+    </div>
+
+    <div class="card">
+      <div class="tc-section-title">
+        <span>月別記録</span>
+        <div class="tc-month-nav">
+          <button onclick="tcChangeViewMonth(-1)">◀</button>
+          <span class="tc-month-label" id="tcViewMonthLabel"></span>
+          <button onclick="tcChangeViewMonth(1)">▶</button>
+        </div>
+      </div>
+      <div id="tcRecordList"></div>
+    </div>
+
+    <div class="card">
+      <div class="tc-section-title">月次集計</div>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="summary-label">出勤日数</div>
+          <div class="summary-value" id="tcTotalDays">0</div>
+          <div class="summary-unit">日</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">合計実働時間</div>
+          <div class="summary-value" id="tcTotalHours">0.0</div>
+          <div class="summary-unit">時間</div>
+        </div>
+      </div>
+      <div class="fac-breakdown" id="tcFacBreakdown"></div>
+    </div>
+
+    <div style="margin: 0 16px 32px;">
+      <button class="tc-export-btn" onclick="tcExportCSV()">📥 CSVで書き出し（給与計算用）</button>
+    </div>
+  </div>
+
+  <div class="toast" id="tcToast"></div>
+</div>
+
+<!-- ===== SHIFT MANAGEMENT TAB ===== -->
+<div id="sh-tab" class="tab-panel">
+
+  <div class="month-nav">
+    <button onclick="prevMonth()">◀</button>
+    <div class="month-label" id="monthLabel"></div>
+    <button onclick="nextMonth()">▶</button>
+    <button class="export-btn" onclick="shiftExportCSV()">📥 CSV出力</button>
+    <button class="export-btn" onclick="openImportModal()" style="background:rgba(255,220,50,0.2);border-color:rgba(255,220,50,0.6);">⚡ Slackから読み込む</button>
+    <button class="export-btn" onclick="resetMonthData()" style="background:rgba(220,50,50,0.15);border-color:rgba(220,50,50,0.5);color:#b91c1c;">🗑 月データをリセット</button>
+    <button class="export-btn" onclick="autoAssign()" style="background:rgba(50,220,100,0.25);border-color:rgba(50,220,100,0.6);">🤖 自動割り当て</button>
+    <span id="autoAssignMsg" style="font-size:12px;margin-left:8px;"></span>
+    <button class="export-btn" onclick="openSlackDraftModal()" style="background:rgba(150,100,255,0.25);border-color:rgba(150,100,255,0.6);">📨 Slack確認依頼</button>
+  </div>
+
+  <div class="settings-bar">
+    <div class="settings-title">よく使う勤務時間（各人のデフォルト）</div>
+    <div class="staff-hours-grid" id="hoursSettings"></div>
+  </div>
+  <div class="settings-bar" style="background:#f9fafb;border-top:1px solid #e5e7eb;">
+    <div class="settings-title">登録患者数（要確認・変更可）</div>
+    <div class="staff-hours-grid" id="facPatientsSettings"></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#dbeafe"></div>施設入力済み</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fee2e2"></div>上限超過</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f3f4f6"></div>休日・休み</div>
+  </div>
+
+  <div class="table-wrapper">
+    <table id="shiftTable"></table>
+  </div>
+
+  <div class="summary-section">
+    <div class="summary-title">▼ 施設別月次集計</div>
+    <div class="fac-summary-grid" id="facSummary"></div>
+  </div>
+
+  <div class="summary-section" style="border-top:2px solid #e5e7eb;padding-top:16px;">
+    <div class="summary-title">▼ 必要人数・カバー率シミュレーション</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:12px;">各施設の月間目標訪問患者数を入力すると、必要な衛生士稼働日数を自動計算します。</div>
+    <div id="capacitySection"></div>
+  </div>
+
+  <!-- Shift Edit Modal -->
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="modalTitle"></div>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <label>勤務時間 <span id="defaultHoursHint" style="font-weight:400;color:#6b7280;font-size:11px"></span></label>
+      <select id="inputHours">
+        <option value="">— 休み —</option>
+        <option value="1">1時間</option><option value="1.5">1.5時間</option>
+        <option value="2">2時間</option><option value="2.5">2.5時間</option>
+        <option value="3">3時間</option><option value="3.5">3.5時間</option>
+        <option value="4">4時間</option><option value="4.5">4.5時間</option>
+        <option value="5">5時間</option><option value="5.5">5.5時間</option>
+        <option value="6">6時間</option><option value="6.5">6.5時間</option>
+        <option value="7">7時間</option><option value="7.5">7.5時間</option>
+        <option value="8">8時間</option>
+      </select>
+      <label>担当施設</label>
+      <select id="inputFacility">
+        <option value="">— 未定 —</option>
+        <option value="いすみ苑">いすみ苑</option>
+        <option value="一宮喜楽園">一宮喜楽園</option>
+        <option value="長生き邑">長生き邑</option>
+        <option value="口腔衛生管理加算">口腔衛生管理加算</option>
+      </select>
+      <label>訪問患者数</label>
+      <input type="number" id="inputPatients" min="0" max="30" placeholder="人数を入力">
+      <div class="limit-info" id="limitInfo"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" onclick="clearCell()">クリア</button>
+        <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="saveCell()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal" style="width:480px;max-width:96vw;">
+      <div class="modal-header">
+        <div class="modal-title">⚡ Slackデータを読み込む</div>
+        <button class="modal-close" onclick="closeImportModal()">×</button>
+      </div>
+      <div class="import-instructions">
+        <strong>使い方：</strong><br>
+        Claudeに「<code>#シフト連絡の今月分をシフトツール用のJSONにして</code>」と頼むと下記形式のJSONを出力します。それをここに貼り付けてください。<br><br>
+        <code>{ "year":2026, "month":7, "hours": { "南雲":{"1":5.5} } }</code>
+      </div>
+      <label>JSONを貼り付け</label>
+      <textarea class="import-area" id="importArea" placeholder='{ "year": 2026, "month": 7, ... }'></textarea>
+      <div id="importMsg" style="font-size:12px;margin-top:8px;min-height:18px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeImportModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="importShifts()">読み込む</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slack Draft Modal -->
+  <div class="modal-overlay" id="slackDraftModal">
+    <div class="modal" style="width:560px;max-width:96vw;">
+      <div class="modal-header">
+        <div class="modal-title">📨 Slack送信テキスト</div>
+        <button class="modal-close" onclick="closeSlackDraftModal()">×</button>
+      </div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:6px;" id="slackDraftLabel">📋 佐藤Dr確認用テキスト</div>
+      <pre class="slack-draft" id="slackDraftText"></pre>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+        <button class="copy-btn" id="copySlackBtn" onclick="copySlackDraft()">📋 テキストをコピー</button>
+        <button class="copy-btn" id="slackDraftMode" data-mode="confirm" onclick="toggleSlackDraftMode()" style="background:#7c3aed;">スタッフ通知用に切替</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAYROLL TAB ===== -->
+<div id="pay-tab" class="tab-panel">
+
+<!-- PIN LOCK SCREEN -->
+<div id="pinLockScreen" style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+  <div class="pin-box">
+    <div class="pin-icon">🔐</div>
+    <div class="pin-title" id="pinBoxTitle">暗証番号を入力</div>
+    <div class="pin-sub" id="pinBoxSub">給与計算は管理者専用です</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-numpad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key zero" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <div class="pin-error" id="pinError"></div>
+    <div class="pin-setup-link" id="pinSetupLink" onclick="pinStartSetup()" style="display:none;">暗証番号を変更する</div>
+  </div>
+</div>
+
+<!-- PAYROLL CONTENT (shown after PIN unlock) -->
+<div id="payContent" style="display:none;">
+
+  <div class="pay-card">
+    <div class="pay-title">💴 給与計算</div>
+
+    <div class="pay-month-row">
+      <label>対象月：</label>
+      <input type="month" id="payTargetMonth" onchange="payMonthChange()" />
+    </div>
+
+    <div id="bonusNotice" class="bonus-notice">🎁 この月は<strong id="bonusMonthLabel"></strong>の賞与月です。各スタッフの賞与欄が表示されています。</div>
+
+    <div class="tax-hint">
+      💡 <strong>源泉徴収について</strong>：自動計算（乙欄）は目安です。扶養控除等申告書を提出している方（甲欄）は実際の税額表で確認の上、金額を手動で修正してください。
+    </div>
+
+    <!-- 交通費設定 -->
+    <div style="margin-bottom:18px;">
+      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:8px;">🚌 交通費設定（往復・1回あたり）</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:10px;">施設ごと・スタッフごとの往復運賃を入力してください。CSVインポート後、訪問日数×運賃で自動合計します。</div>
+      <div style="overflow-x:auto;">
+        <table id="transportTable" style="border-collapse:collapse;font-size:12px;min-width:400px;">
+          <thead>
+            <tr>
+              <th style="padding:7px 10px;background:#f0f4f8;text-align:left;border:1px solid #e2e8f0;font-weight:700;color:#475569;">スタッフ</th>
+              <th style="padding:7px 10px;background:#f0f4f8;text-align:center;border:1px solid #e2e8f0;font-weight:700;color:#475569;">いすみ苑<br><span style="font-weight:400;color:#94a3b8;">(往復)</span></th>
+              <th style="padding:7px 10px;background:#f0f4f8;text-align:center;border:1px solid #e2e8f0;font-weight:700;color:#475569;">一宮喜楽園<br><span style="font-weight:400;color:#94a3b8;">(往復)</span></th>
+              <th style="padding:7px 10px;background:#f0f4f8;text-align:center;border:1px solid #e2e8f0;font-weight:700;color:#475569;">長生き邑<br><span style="font-weight:400;color:#94a3b8;">(往復)</span></th>
+              <th style="padding:7px 10px;background:#e0f2fe;text-align:center;border:1px solid #e2e8f0;font-weight:700;color:#0369a1;" id="thTransportTotal">今月合計<br><span style="font-weight:400;font-size:10px;" id="thTransportMonth"></span></th>
+            </tr>
+          </thead>
+          <tbody id="transportTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="font-size:13px;color:#64748b;margin-bottom:10px;">
+      各スタッフのCSVをインポートしてください。源泉徴収は空欄で自動計算（乙欄）、手動で上書きも可能です。
+    </div>
+
+    <div class="staff-import-grid" id="payImportGrid"></div>
+  </div>
+
+  <div class="pay-card" id="payResultCard" style="display:none;">
+    <div class="pay-title">📊 給与明細</div>
+    <div class="pay-table-wrap">
+    <table class="pay-table" id="payTable">
+      <thead>
+        <tr>
+          <th>氏名</th>
+          <th>日数</th>
+          <th>時間</th>
+          <th class="right">基本給</th>
+          <th class="right">交通費</th>
+          <th class="right" id="thBonus" style="display:none;">賞与</th>
+          <th class="right">支給合計</th>
+          <th class="right">源泉徴収</th>
+          <th class="right">差引支給額</th>
+        </tr>
+      </thead>
+      <tbody id="payTableBody"></tbody>
+      <tfoot id="payTableFoot"></tfoot>
+    </table>
+    </div>
+  </div>
+
+  <div style="padding: 0 0 32px;">
+    <button class="pay-export-btn" onclick="payExportCSV()" id="payExportBtn" style="display:none;">📥 給与明細CSVで書き出し</button>
+  </div>
+</div><!-- /payContent -->
+
+</div><!-- /pay-tab -->
+
+<script>
+// ========================================
+// SHARED CONSTANTS & UTILITIES
+// ========================================
+const STAFF = ['南雲', '末吉', '吉岡', '高梨', '古阪'];
+const FACILITIES = ['いすみ苑', '一宮喜楽園', '長生き邑'];
+const DOW_JP = ['日','月','火','水','木','金','土'];
+
+function zeroPad(n) { return String(n).padStart(2, '0'); }
+function daysInMonth(y,m) { return new Date(y,m,0).getDate(); }
+function dayOfWeek(y,m,d) { return new Date(y,m-1,d).getDay(); }
+
+// ========================================
+// TAB SWITCHING
+// ========================================
+let shiftInitialized = false;
+let payInitialized = false;
+let payUnlocked = false;
+
+function switchTab(tab) {
+  // Lock payroll when leaving
+  if (tab !== 'payroll' && payUnlocked) { payUnlocked = false; }
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.app-tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tab === 'timecard' ? 'tc-tab' : tab === 'shift' ? 'sh-tab' : 'pay-tab').classList.add('active');
+  document.querySelector(`.app-tab-btn[data-tab="${tab}"]`).classList.add('active');
+  if (tab === 'shift' && !shiftInitialized) { shiftInitialized = true; shiftInit(); }
+  if (tab === 'payroll') {
+    if (payUnlocked) {
+      pinShowContent();
+      if (!payInitialized) { payInitialized = true; payInit(); }
+    } else {
+      pinShowLock();
+    }
+  }
+}
+
+// ========================================
+// PIN LOCK
+// ========================================
+const PIN_KEY = 'mgr_pin';
+let pinBuffer = '';
+let pinSetupStep = 0; // 0=none, 1=enter new, 2=confirm new
+let pinSetupFirst = '';
+
+function pinGetStored() { return localStorage.getItem(PIN_KEY) || ''; }
+
+function pinShowLock() {
+  const stored = pinGetStored();
+  document.getElementById('pinLockScreen').style.display = 'flex';
+  document.getElementById('payContent').style.display = 'none';
+  pinBuffer = ''; pinSetupStep = 0; pinSetupFirst = '';
+  pinRenderDots();
+  document.getElementById('pinError').textContent = '';
+  if (!stored) {
+    // First time: setup mode
+    document.getElementById('pinBoxTitle').textContent = '暗証番号を設定';
+    document.getElementById('pinBoxSub').textContent = '管理者用の4桁の番号を決めてください';
+    document.getElementById('pinSetupLink').style.display = 'none';
+    pinSetupStep = 1;
+  } else {
+    document.getElementById('pinBoxTitle').textContent = '暗証番号を入力';
+    document.getElementById('pinBoxSub').textContent = '給与計算は管理者専用です';
+    document.getElementById('pinSetupLink').style.display = 'block';
+  }
+}
+
+function pinShowContent() {
+  document.getElementById('pinLockScreen').style.display = 'none';
+  document.getElementById('payContent').style.display = 'block';
+}
+
+function pinStartSetup() {
+  pinBuffer = ''; pinSetupStep = 1; pinSetupFirst = '';
+  document.getElementById('pinBoxTitle').textContent = '新しい暗証番号を入力';
+  document.getElementById('pinBoxSub').textContent = '4桁の番号を設定してください';
+  document.getElementById('pinSetupLink').style.display = 'none';
+  document.getElementById('pinError').textContent = '';
+  pinRenderDots();
+}
+
+function pinKey(digit) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  pinRenderDots();
+  if (pinBuffer.length === 4) setTimeout(pinSubmit, 150);
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  pinRenderDots();
+  document.getElementById('pinError').textContent = '';
+}
+
+function pinRenderDots() {
+  for (let i = 0; i < 4; i++) {
+    const dot = document.getElementById('pd' + i);
+    if (dot) dot.classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+function pinSubmit() {
+  const stored = pinGetStored();
+  if (pinSetupStep === 1) {
+    // Save first entry for confirmation
+    pinSetupFirst = pinBuffer; pinBuffer = '';
+    pinRenderDots();
+    document.getElementById('pinBoxTitle').textContent = '確認入力';
+    document.getElementById('pinBoxSub').textContent = 'もう一度同じ番号を入力してください';
+    pinSetupStep = 2;
+    return;
+  }
+  if (pinSetupStep === 2) {
+    if (pinBuffer === pinSetupFirst) {
+      localStorage.setItem(PIN_KEY, pinBuffer);
+      pinBuffer = ''; pinSetupStep = 0;
+      document.getElementById('pinError').textContent = '';
+      payUnlocked = true;
+      pinShowContent();
+      if (!payInitialized) { payInitialized = true; payInit(); }
+    } else {
+      document.getElementById('pinError').textContent = '番号が一致しません。もう一度。';
+      pinBuffer = ''; pinSetupFirst = ''; pinSetupStep = 1;
+      pinRenderDots();
+      document.getElementById('pinBoxTitle').textContent = '新しい暗証番号を入力';
+      document.getElementById('pinBoxSub').textContent = '4桁の番号を設定してください';
+    }
+    return;
+  }
+  // Normal unlock
+  if (pinBuffer === stored) {
+    payUnlocked = true;
+    document.getElementById('pinError').textContent = '';
+    pinShowContent();
+    if (!payInitialized) { payInitialized = true; payInit(); }
+  } else {
+    document.getElementById('pinError').textContent = '番号が違います。もう一度お試しください。';
+    pinBuffer = '';
+    pinRenderDots();
+    // Shake animation
+    const box = document.querySelector('.pin-box');
+    box.style.animation = 'pinShake 0.4s';
+    box.addEventListener('animationend', () => { box.style.animation = ''; }, { once: true });
+  }
+}
+
+// ========================================
+// TIMECARD
+// ========================================
+let tcCurrentName = '';
+let tcSelectedFac = '';
+let tcBreakMin = 90;
+let tcEditingKey = null;
+let tcViewYear = new Date().getFullYear();
+let tcViewMonth = new Date().getMonth() + 1;
+
+function tcInit() {
+  const saved = localStorage.getItem('tc_name');
+  if (saved && STAFF.includes(saved)) { tcCurrentName = saved; tcShowMain(); }
+  else tcShowSetup();
+}
+
+function tcShowSetup() {
+  document.getElementById('tcSetupScreen').style.display = 'flex';
+  document.getElementById('tcMainScreen').style.display = 'none';
+  const grid = document.getElementById('tcNameGrid');
+  grid.innerHTML = '';
+  STAFF.forEach(name => {
+    const btn = document.createElement('button');
+    btn.className = 'name-btn';
+    btn.textContent = name;
+    btn.onclick = () => { tcCurrentName = name; localStorage.setItem('tc_name', name); tcShowMain(); };
+    grid.appendChild(btn);
+  });
+}
+
+function tcShowMain() {
+  document.getElementById('tcSetupScreen').style.display = 'none';
+  document.getElementById('tcMainScreen').style.display = 'block';
+  const now = new Date();
+  document.getElementById('tcHeaderName').textContent = tcCurrentName + ' さん';
+  document.getElementById('tcHeaderDate').textContent = now.getFullYear() + '/' + zeroPad(now.getMonth()+1) + '/' + zeroPad(now.getDate()) + '（' + DOW_JP[now.getDay()] + '）';
+  document.getElementById('tcTodayLabel').textContent = '📅 ' + now.getFullYear() + '/' + zeroPad(now.getMonth()+1) + '/' + zeroPad(now.getDate()) + '（' + DOW_JP[now.getDay()] + '）の記録';
+  // Facility buttons
+  const fb = document.getElementById('tcFacBtns');
+  fb.innerHTML = '';
+  FACILITIES.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'fac-btn'; btn.textContent = f; btn.dataset.fac = f;
+    btn.onclick = () => tcSelectFac(f);
+    fb.appendChild(btn);
+  });
+  tcViewYear = now.getFullYear(); tcViewMonth = now.getMonth() + 1;
+  tcSelectBreak(90);
+  tcLoadTodayRecord();
+  tcRenderView();
+}
+
+function tcChangeName() {
+  if (!confirm('名前を変更しますか？')) return;
+  localStorage.removeItem('tc_name');
+  tcShowSetup();
+}
+
+function tcSelectFac(fac) {
+  tcSelectedFac = fac;
+  document.querySelectorAll('#tcFacBtns .fac-btn').forEach(b => b.classList.toggle('selected', b.dataset.fac === fac));
+}
+
+function tcSelectBreak(min) {
+  tcBreakMin = min;
+  const inp = document.getElementById('tcBreakCustom');
+  if (inp) inp.value = min;
+  document.querySelectorAll('#tc-tab .break-preset').forEach(b => b.classList.toggle('selected', Number(b.dataset.min) === min));
+  tcUpdateStatus();
+}
+
+function tcBreakCustomInput() {
+  const val = parseInt(document.getElementById('tcBreakCustom').value) || 0;
+  tcBreakMin = val;
+  document.querySelectorAll('#tc-tab .break-preset').forEach(b => b.classList.toggle('selected', Number(b.dataset.min) === val));
+  tcUpdateStatus();
+}
+
+function tcNowStr() { const n = new Date(); return zeroPad(n.getHours()) + ':' + zeroPad(n.getMinutes()); }
+
+function tcPunchIn() {
+  document.getElementById('tcInTime').value = tcNowStr();
+  tcUpdateStatus(); tcShowToast('出勤時刻を記録しました');
+}
+function tcPunchOut() {
+  document.getElementById('tcOutTime').value = tcNowStr();
+  document.getElementById('tcPunchOutBtn').classList.add('ready');
+  tcUpdateStatus(); tcShowToast('退勤時刻を記録しました');
+}
+
+function tcCalcGross(inT, outT) {
+  const [ih,im] = inT.split(':').map(Number), [oh,om] = outT.split(':').map(Number);
+  return ((oh*60+om)-(ih*60+im))/60;
+}
+function tcCalcNet(inT, outT, bMin) { return Math.max(0, tcCalcGross(inT, outT) - (bMin||0)/60); }
+
+function tcUpdateStatus() {
+  const inT = document.getElementById('tcInTime').value;
+  const outT = document.getElementById('tcOutTime').value;
+  const el = document.getElementById('tcTodayStatus');
+  if (inT && outT) {
+    const net = tcCalcNet(inT, outT, tcBreakMin);
+    const bStr = tcBreakMin > 0 ? `・休憩${tcBreakMin}分` : '';
+    el.textContent = `${inT} 〜 ${outT}${bStr} → 実働 ${net.toFixed(1)}時間`;
+    el.className = 'today-status active';
+  } else if (inT) {
+    el.textContent = `出勤 ${inT} ・ 退勤未打刻`;
+    el.className = 'today-status active';
+  } else {
+    el.textContent = '未打刻'; el.className = 'today-status';
+  }
+}
+
+function tcDateKey(d) { return d.getFullYear()+'-'+zeroPad(d.getMonth()+1)+'-'+zeroPad(d.getDate()); }
+function tcStorageKey(name) { return 'tc_records_'+name; }
+function tcLoadRecs(name) { try { return JSON.parse(localStorage.getItem(tcStorageKey(name))||'{}'); } catch { return {}; } }
+function tcSaveRecs(name, recs) { localStorage.setItem(tcStorageKey(name), JSON.stringify(recs)); }
+
+function tcLoadTodayRecord() {
+  const today = tcDateKey(new Date());
+  const rec = tcLoadRecs(tcCurrentName)[today];
+  if (!rec) return;
+  if (rec.fac) tcSelectFac(rec.fac);
+  if (rec.in) document.getElementById('tcInTime').value = rec.in;
+  if (rec.out) { document.getElementById('tcOutTime').value = rec.out; document.getElementById('tcPunchOutBtn').classList.add('ready'); }
+  tcSelectBreak(rec.break || 0);
+  tcUpdateStatus();
+}
+
+function tcEditRecord(key) {
+  const rec = tcLoadRecs(tcCurrentName)[key];
+  if (!rec) return;
+  tcEditingKey = key;
+  if (rec.fac) tcSelectFac(rec.fac);
+  document.getElementById('tcInTime').value = rec.in || '';
+  document.getElementById('tcOutTime').value = rec.out || '';
+  if (rec.out) document.getElementById('tcPunchOutBtn').classList.add('ready');
+  tcSelectBreak(rec.break || 0);
+  const d = new Date(key+'T00:00:00');
+  document.getElementById('tcEditDateLabel').textContent = key.replace(/-/g,'/')+'（'+DOW_JP[d.getDay()]+'）';
+  document.getElementById('tcEditBanner').style.display = 'flex';
+  document.getElementById('tcTodayLabel').textContent = '✏️ 過去記録の編集';
+  tcUpdateStatus(); window.scrollTo({top:0,behavior:'smooth'});
+  tcShowToast('✏️ 編集フォームに読み込みました');
+}
+
+function tcCancelEdit() {
+  tcEditingKey = null;
+  document.getElementById('tcEditBanner').style.display = 'none';
+  const now = new Date();
+  document.getElementById('tcTodayLabel').textContent = '📅 '+now.getFullYear()+'/'+zeroPad(now.getMonth()+1)+'/'+zeroPad(now.getDate())+'（'+DOW_JP[now.getDay()]+'）の記録';
+  document.getElementById('tcInTime').value = '';
+  document.getElementById('tcOutTime').value = '';
+  document.getElementById('tcPunchOutBtn').classList.remove('ready');
+  tcSelectedFac = '';
+  document.querySelectorAll('#tcFacBtns .fac-btn').forEach(b => b.classList.remove('selected'));
+  tcSelectBreak(90); tcLoadTodayRecord();
+}
+
+function tcSaveRecord() {
+  const inT = document.getElementById('tcInTime').value;
+  const outT = document.getElementById('tcOutTime').value;
+  if (!inT) { tcShowToast('⚠ 出勤時刻を入力してください'); return; }
+  if (!tcSelectedFac) { tcShowToast('⚠ 訪問施設を選んでください'); return; }
+  const key = tcEditingKey || tcDateKey(new Date());
+  const recs = tcLoadRecs(tcCurrentName);
+  recs[key] = { fac: tcSelectedFac, in: inT, out: outT||'', break: tcBreakMin };
+  tcSaveRecs(tcCurrentName, recs);
+  if (tcEditingKey) {
+    tcEditingKey = null;
+    document.getElementById('tcEditBanner').style.display = 'none';
+    const now = new Date();
+    document.getElementById('tcTodayLabel').textContent = '📅 '+now.getFullYear()+'/'+zeroPad(now.getMonth()+1)+'/'+zeroPad(now.getDate())+'（'+DOW_JP[now.getDay()]+'）の記録';
+    tcLoadTodayRecord();
+  }
+  tcRenderView(); tcShowToast('✅ 記録を保存しました');
+}
+
+function tcChangeViewMonth(delta) {
+  tcViewMonth += delta;
+  if (tcViewMonth > 12) { tcViewMonth = 1; tcViewYear++; }
+  if (tcViewMonth < 1) { tcViewMonth = 12; tcViewYear--; }
+  tcRenderView();
+}
+
+function tcRenderView() {
+  document.getElementById('tcViewMonthLabel').textContent = tcViewYear+'年'+tcViewMonth+'月';
+  const recs = tcLoadRecs(tcCurrentName);
+  const prefix = tcViewYear+'-'+zeroPad(tcViewMonth)+'-';
+  const keys = Object.keys(recs).filter(k=>k.startsWith(prefix)).sort();
+  const listEl = document.getElementById('tcRecordList');
+  if (keys.length === 0) {
+    listEl.innerHTML = '<div class="empty-msg">この月の記録はありません</div>';
+  } else {
+    listEl.innerHTML = '';
+    keys.forEach(key => {
+      const rec = recs[key];
+      const d = new Date(key+'T00:00:00');
+      const net = (rec.in && rec.out) ? tcCalcNet(rec.in, rec.out, rec.break||0) : null;
+      const bStr = (rec.break && rec.break>0) ? `<span style="font-size:11px;color:#f59e0b;margin-left:3px;">休${rec.break}分</span>` : '';
+      const row = document.createElement('div');
+      row.className = 'record-item';
+      row.innerHTML = `
+        <div class="record-date">${key.slice(8)}日（${DOW_JP[d.getDay()]}）</div>
+        <div class="record-fac">${rec.fac||'-'}</div>
+        <div class="record-time">${rec.in||'--:--'} 〜 ${rec.out||'--:--'}${bStr}</div>
+        <div class="record-hours">${net!==null?net.toFixed(1)+'h':'-'}</div>
+        <button class="record-edit" onclick="tcEditRecord('${key}')" title="編集">✏️</button>
+        <button class="record-del" onclick="tcDeleteRecord('${key}')" title="削除">✕</button>`;
+      listEl.appendChild(row);
+    });
+  }
+  let totalDays = keys.length, totalHours = 0;
+  const facMap = {};
+  keys.forEach(key => {
+    const rec = recs[key];
+    if (rec.in && rec.out) {
+      const h = tcCalcNet(rec.in, rec.out, rec.break||0);
+      totalHours += h;
+      facMap[rec.fac] = (facMap[rec.fac]||0) + h;
+    }
+  });
+  document.getElementById('tcTotalDays').textContent = totalDays;
+  document.getElementById('tcTotalHours').textContent = totalHours.toFixed(1);
+  const bd = document.getElementById('tcFacBreakdown');
+  bd.innerHTML = Object.entries(facMap).sort((a,b)=>b[1]-a[1]).map(([fac,h])=>
+    `<div class="fac-row"><span class="fac-row-name">${fac}</span><span class="fac-row-val">${h.toFixed(1)} 時間</span></div>`
+  ).join('');
+}
+
+function tcDeleteRecord(key) {
+  if (!confirm(key+' の記録を削除しますか？')) return;
+  const recs = tcLoadRecs(tcCurrentName);
+  delete recs[key]; tcSaveRecs(tcCurrentName, recs);
+  tcRenderView(); tcShowToast('削除しました');
+}
+
+function tcExportCSV() {
+  const recs = tcLoadRecs(tcCurrentName);
+  const prefix = tcViewYear+'-'+zeroPad(tcViewMonth)+'-';
+  const keys = Object.keys(recs).filter(k=>k.startsWith(prefix)).sort();
+  if (keys.length === 0) { tcShowToast('⚠ この月の記録がありません'); return; }
+  const rows = [['氏名','日付','曜日','施設','出勤','退勤','休憩(分)','実働時間(h)']];
+  keys.forEach(key => {
+    const rec = recs[key];
+    const d = new Date(key+'T00:00:00');
+    const net = (rec.in && rec.out) ? tcCalcNet(rec.in, rec.out, rec.break||0).toFixed(2) : '';
+    rows.push([tcCurrentName, key, DOW_JP[d.getDay()], rec.fac||'', rec.in||'', rec.out||'', rec.break||0, net]);
+  });
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'タイムカード_'+tcCurrentName+'_'+tcViewYear+zeroPad(tcViewMonth)+'.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+  tcShowToast('📥 CSVをダウンロードしました');
+}
+
+function tcShowToast(msg) {
+  const t = document.getElementById('tcToast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ========================================
+// SHIFT MANAGEMENT
+// ========================================
+const FAC_PATIENTS_DEFAULT = { 'いすみ苑': 91, '一宮喜楽園': 51, '長生き邑': 38 };
+function getFacPatients() {
+  const saved = localStorage.getItem('fac_patients');
+  return saved ? JSON.parse(saved) : { ...FAC_PATIENTS_DEFAULT };
+}
+const FAC_PATIENTS = getFacPatients();
+
+const SHIFT_RULES = {
+  facPriorityByDow: {
+    4: { '高梨':['一宮喜楽園','いすみ苑'], '吉岡':['いすみ苑','一宮喜楽園'], '南雲':['いすみ苑','一宮喜楽園'], '末吉':['いすみ苑','一宮喜楽園'], '古阪':['いすみ苑','一宮喜楽園'] },
+    1: { '高梨':['長生き邑','いすみ苑','一宮喜楽園'], '吉岡':['長生き邑','いすみ苑','一宮喜楽園'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['長生き邑','いすみ苑','一宮喜楽園'] },
+    2: { '高梨':['一宮喜楽園','いすみ苑','長生き邑'], '吉岡':['いすみ苑','一宮喜楽園','長生き邑'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['一宮喜楽園','いすみ苑','長生き邑'] },
+  },
+  facPriority: { '高梨':['一宮喜楽園','いすみ苑','長生き邑'], '吉岡':['いすみ苑','一宮喜楽園','長生き邑'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['長生き邑','いすみ苑','一宮喜楽園'] },
+  dowQuota: { 4:{'いすみ苑':3,'一宮喜楽園':2,'長生き邑':0}, 1:{'長生き邑':3,'いすみ苑':1,'一宮喜楽園':1}, 2:{'いすみ苑':2,'一宮喜楽園':2,'長生き邑':1}, 3:{'いすみ苑':2,'一宮喜楽園':1,'長生き邑':1}, 5:{'いすみ苑':2,'一宮喜楽園':1,'長生き邑':1} },
+  maxPerWeek: 1,
+};
+
+let currentYear, currentMonth;
+let editKey = null;
+
+function storeKey(y,m) { return 'shift_'+y+'_'+m; }
+function loadData(y,m) { try { return JSON.parse(localStorage.getItem(storeKey(y,m))||'{}'); } catch { return {}; } }
+function saveData(y,m,d) { localStorage.setItem(storeKey(y,m), JSON.stringify(d)); }
+function loadDefaultHours() { try { return JSON.parse(localStorage.getItem('default_hours')||'{}'); } catch { return {}; } }
+function saveDefaultHours(h) { localStorage.setItem('default_hours', JSON.stringify(h)); }
+
+function shiftInit() {
+  const now = new Date();
+  currentYear = now.getFullYear(); currentMonth = now.getMonth()+1;
+  render();
+}
+
+function resetMonthData() {
+  if (!confirm(`${currentYear}年${currentMonth}月のシフトデータを全て削除しますか？\nこの操作は元に戻せません。`)) return;
+  localStorage.removeItem(storeKey(currentYear,currentMonth));
+  render(); alert(`${currentYear}年${currentMonth}月のデータをリセットしました。`);
+}
+
+function calcLimit(hours) {
+  if (!hours || hours==='') return null;
+  return Math.floor(parseFloat(hours)/8*15);
+}
+
+function prevMonth() { currentMonth--; if(currentMonth<1){currentMonth=12;currentYear--;} render(); }
+function nextMonth() { currentMonth++; if(currentMonth>12){currentMonth=1;currentYear++;} render(); }
+
+function renderSettings() {
+  const defaults = loadDefaultHours();
+  const container = document.getElementById('hoursSettings');
+  container.innerHTML = '';
+  STAFF.forEach(name => {
+    const h = defaults[name]||'6';
+    const limit = calcLimit(h);
+    const div = document.createElement('div');
+    div.className = 'staff-hour-item';
+    div.innerHTML = `<label>${name}</label>
+      <select onchange="updateDefaultHours('${name}',this.value)">
+        ${['1','1.5','2','2.5','3','3.5','4','4.5','5','5.5','6','6.5','7','7.5','8'].map(v=>`<option value="${v}"${v==h?' selected':''}>${v}h</option>`).join('')}
+      </select>
+      <span class="limit-badge" id="limit_${name}">上限${limit}人</span>`;
+    container.appendChild(div);
+  });
+}
+
+function renderFacSettings() {
+  const pts = getFacPatients();
+  const container = document.getElementById('facPatientsSettings');
+  container.innerHTML = '';
+  FACILITIES.forEach(fac => {
+    const div = document.createElement('div');
+    div.className = 'staff-hour-item';
+    div.innerHTML = `<label style="font-size:11px;">${fac}</label>
+      <input type="number" min="1" max="300" value="${pts[fac]}"
+        style="width:55px;border:1px solid #e5e7eb;border-radius:4px;padding:2px 4px;font-size:12px;text-align:center;"
+        onchange="updateFacPatients('${fac}',this.value)">
+      <span style="font-size:11px;color:#6b7280;">人</span>`;
+    container.appendChild(div);
+  });
+}
+
+function updateFacPatients(fac,val) {
+  const pts = getFacPatients(); pts[fac] = parseInt(val)||pts[fac];
+  localStorage.setItem('fac_patients', JSON.stringify(pts));
+  Object.assign(FAC_PATIENTS, pts); renderCapacity(); renderFacSummary(currentYear,currentMonth);
+}
+
+function updateDefaultHours(name,val) {
+  const defaults = loadDefaultHours(); defaults[name] = val; saveDefaultHours(defaults);
+  const badge = document.getElementById('limit_'+name);
+  if(badge) badge.textContent = '上限'+calcLimit(val)+'人';
+  render();
+}
+
+function render() {
+  document.getElementById('monthLabel').textContent = currentYear+'年'+currentMonth+'月';
+  renderSettings(); renderFacSettings(); renderTable(currentYear,currentMonth);
+  renderFacSummary(currentYear,currentMonth); renderCapacity();
+}
+
+function renderTable(y,m) {
+  const days = daysInMonth(y,m), data = loadData(y,m), defaults = loadDefaultHours();
+  const table = document.getElementById('shiftTable');
+  let thead = '<thead><tr><th>衛生士</th>';
+  for(let d=1;d<=days;d++){const dow=dayOfWeek(y,m,d);thead+=`<th class="${dow===6?'sat':dow===0?'sun':''}">${d}</th>`;}
+  thead += '<th>月計</th></tr><tr><th></th>';
+  for(let d=1;d<=days;d++){const dow=dayOfWeek(y,m,d);thead+=`<th class="${dow===6?'sat':dow===0?'sun':''}">${DOW_JP[dow]}</th>`;}
+  thead += '<th>訪問数</th></tr></thead>';
+  let tbody = '<tbody>';
+  STAFF.forEach(name => {
+    let monthTotal = 0;
+    tbody += `<tr><td class="staff-col">${name}</td>`;
+    for(let d=1;d<=days;d++){
+      const dow = dayOfWeek(y,m,d), isWE = dow===0||dow===6;
+      const key = `${name}_${d}`, cell = data[key]||{};
+      const hours = cell.hours!==undefined?cell.hours:'';
+      const facility = cell.facility||'', patients = cell.patients!==undefined?cell.patients:'';
+      const limit = calcLimit(hours);
+      const isOff = !hours||hours==='';
+      const over = !isOff&&limit!==null&&patients!==''&&parseInt(patients)>limit;
+      if(isWE) {
+        tbody += `<td class="shift-cell weekend"><div class="cell-inner"><span class="cell-off">休</span></div></td>`;
+      } else {
+        if(patients!=='') monthTotal += parseInt(patients)||0;
+        tbody += `<td class="shift-cell ${over?'over-limit':'has-data'}" onclick="openModal('${name}',${d},'${isWE}')"><div class="cell-inner">`;
+        if(isOff) tbody += `<span class="cell-off">休み</span>`;
+        else {
+          if(facility) tbody += `<div class="cell-facility">${facility}</div>`;
+          tbody += `<div class="cell-hours">${hours}h → 上限<span class="cell-limit">${limit}人</span></div>`;
+          if(patients!=='') { tbody += `<div class="cell-patients">${patients}人</div>`; if(over) tbody += `<div class="cell-warn">⚠ 上限超過</div>`; }
+          else tbody += `<div style="font-size:10px;color:#9ca3af">未入力</div>`;
+        }
+        tbody += `</div></td>`;
+      }
+    }
+    tbody += `<td class="total-col">${monthTotal>0?monthTotal+'人':'-'}</td></tr>`;
+  });
+  tbody += '</tbody>';
+  table.innerHTML = thead + tbody;
+}
+
+function renderFacSummary(y,m) {
+  const days=daysInMonth(y,m), data=loadData(y,m);
+  const facTotals = {};
+  FACILITIES.forEach(f=>{ facTotals[f]={days:0,patients:0,staffSet:new Set()}; });
+  STAFF.forEach(name => {
+    for(let d=1;d<=days;d++){
+      const dow=dayOfWeek(y,m,d); if(dow===0||dow===6) continue;
+      const cell=data[`${name}_${d}`]||{}, fac=cell.facility||'', pts=cell.patients!==undefined?parseInt(cell.patients)||0:0;
+      if(fac&&FACILITIES.includes(fac)&&pts>0){ facTotals[fac].patients+=pts; facTotals[fac].staffSet.add(name); facTotals[fac].days++; }
+    }
+  });
+  const container = document.getElementById('facSummary');
+  container.innerHTML = '';
+  FACILITIES.forEach(fac => {
+    const ft=facTotals[fac], regPts=FAC_PATIENTS[fac], card=document.createElement('div');
+    card.className='fac-card';
+    card.innerHTML=`<div class="fac-card-name">🏥 ${fac}</div>
+      <div class="fac-card-stat"><span>登録患者数</span><strong>${regPts}人</strong></div>
+      <div class="fac-card-stat"><span>今月の訪問回数</span><strong>${ft.days}回</strong></div>
+      <div class="fac-card-stat"><span>今月の訪問患者数合計</span><strong>${ft.patients}人</strong></div>
+      <div class="fac-card-stat"><span>担当衛生士</span><strong>${ft.staffSet.size>0?[...ft.staffSet].join('、'):'—'}</strong></div>`;
+    container.appendChild(card);
+  });
+}
+
+function openModal(name,day,isWeekend) {
+  if(isWeekend==='true') return;
+  const y=currentYear,m=currentMonth,data=loadData(y,m),defaults=loadDefaultHours();
+  const key=`${name}_${day}`,cell=data[key]||{},dow=dayOfWeek(y,m,day);
+  editKey={name,day};
+  document.getElementById('modalTitle').textContent=`${name} — ${m}月${day}日(${DOW_JP[dow]})`;
+  document.getElementById('inputHours').value=cell.hours!==undefined?cell.hours:'';
+  document.getElementById('inputFacility').value=cell.facility||'';
+  document.getElementById('inputPatients').value=cell.patients!==undefined?cell.patients:'';
+  document.getElementById('defaultHoursHint').textContent=`（よく使う時間: ${defaults[name]||'6'}h）`;
+  updateLimitInfo();
+  document.getElementById('inputHours').addEventListener('change',updateLimitInfo);
+  document.getElementById('inputPatients').addEventListener('input',updateLimitInfo);
+  document.getElementById('modal').classList.add('open');
+}
+
+function updateLimitInfo() {
+  const hours=document.getElementById('inputHours').value, patients=document.getElementById('inputPatients').value;
+  const limit=calcLimit(hours), info=document.getElementById('limitInfo');
+  if(!hours){info.textContent='休みの日は算定なし';info.className='limit-info';return;}
+  const over=patients!==''&&parseInt(patients)>limit;
+  info.className=`limit-info${over?' warn':''}`;
+  info.textContent=over?`⚠ 上限超過！${patients}人 > 算定上限${limit}人`:`算定上限：${hours}h ÷ 8 × 15 = ${limit}人`;
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open'); editKey=null;
+  document.getElementById('inputHours').removeEventListener('change',updateLimitInfo);
+  document.getElementById('inputPatients').removeEventListener('input',updateLimitInfo);
+}
+
+function saveCell() {
+  if(!editKey) return;
+  const {name,day}=editKey,y=currentYear,m=currentMonth,data=loadData(y,m);
+  data[`${name}_${day}`]={hours:document.getElementById('inputHours').value, facility:document.getElementById('inputFacility').value, patients:document.getElementById('inputPatients').value};
+  saveData(y,m,data); closeModal(); render();
+}
+
+function clearCell() {
+  if(!editKey) return;
+  const {name,day}=editKey,y=currentYear,m=currentMonth,data=loadData(y,m);
+  delete data[`${name}_${day}`]; saveData(y,m,data); closeModal(); render();
+}
+
+function shiftExportCSV() {
+  const y=currentYear,m=currentMonth,days=daysInMonth(y,m),data=loadData(y,m),defaults=loadDefaultHours();
+  let csv=`衛生士シフト表 ${y}年${m}月\n衛生士,`;
+  for(let d=1;d<=days;d++) csv+=`${d}(${DOW_JP[dayOfWeek(y,m,d)]}),`;
+  csv+='月計\n';
+  STAFF.forEach(name => {
+    let row=`${name},`, total=0;
+    for(let d=1;d<=days;d++){
+      const dow=dayOfWeek(y,m,d);
+      if(dow===0||dow===6){row+=',';continue;}
+      const cell=data[`${name}_${d}`]||{};
+      const h=cell.hours!==undefined?cell.hours:(defaults[name]||'6'), f=cell.facility||'', p=cell.patients!==undefined?cell.patients:'';
+      if(p!=='') total+=parseInt(p)||0;
+      row+=`"${f} ${h}h ${p}人",`;
+    }
+    csv+=row+`${total}人\n`;
+  });
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`シフト_${y}年${m}月.csv`; a.click();
+}
+
+function openImportModal() { document.getElementById('importModal').classList.add('open'); document.getElementById('importArea').value=''; document.getElementById('importMsg').textContent=''; }
+function closeImportModal() { document.getElementById('importModal').classList.remove('open'); }
+
+function importShifts() {
+  const raw=document.getElementById('importArea').value.trim(), msg=document.getElementById('importMsg');
+  if(!raw){msg.textContent='JSONを貼り付けてください。';msg.style.color='#b91c1c';return;}
+  let parsed;
+  try{parsed=JSON.parse(raw);}catch(e){msg.textContent='JSON形式エラー: '+e.message;msg.style.color='#b91c1c';return;}
+  const y=parsed.year||currentYear, m=parsed.month||currentMonth, data=loadData(y,m);
+  let count=0;
+  if(parsed.assignments){Object.entries(parsed.assignments).forEach(([ds,fm])=>{const d=parseInt(ds);Object.entries(fm).forEach(([fac,sl])=>{sl.forEach(name=>{if(!STAFF.includes(name))return;const key=`${name}_${d}`;if(!data[key])data[key]={};data[key].facility=fac;count++;});});});}
+  if(parsed.hours){Object.entries(parsed.hours).forEach(([name,dm])=>{if(!STAFF.includes(name))return;Object.entries(dm).forEach(([ds,h])=>{const key=`${name}_${parseInt(ds)}`;if(!data[key])data[key]={};data[key].hours=String(h);count++;});});}
+  if(parsed.patientCounts){const current=getFacPatients();Object.entries(parsed.patientCounts).forEach(([fac,n])=>{if(FACILITIES.includes(fac)&&typeof n==='number'){current[fac]=n;FAC_PATIENTS[fac]=n;count++;}});localStorage.setItem('fac_patients',JSON.stringify(current));}
+  saveData(y,m,data);
+  if(y!==currentYear||m!==currentMonth){currentYear=y;currentMonth=m;}
+  render();
+  msg.textContent=`✅ ${count}件読み込みました（${y}年${m}月）`;msg.style.color='#15803d';
+  setTimeout(()=>closeImportModal(),1800);
+}
+
+function renderCapacity() {
+  const y=currentYear,m=currentMonth,days=daysInMonth(y,m),data=loadData(y,m);
+  const facActual={};
+  FACILITIES.forEach(f=>{facActual[f]={staffDays:0,totalLimit:0};});
+  STAFF.forEach(name=>{for(let d=1;d<=days;d++){const dow=dayOfWeek(y,m,d);if(dow===0||dow===6)continue;const cell=data[`${name}_${d}`]||{};if(!cell.facility||!cell.hours)continue;const fac=cell.facility;if(!facActual[fac])continue;const lim=calcLimit(cell.hours);if(lim){facActual[fac].staffDays++;facActual[fac].totalLimit+=lim;}}});
+  const staffSummary={};STAFF.forEach(name=>{staffSummary[name]={days:0,total:0};});
+  let grandTotal=0;
+  STAFF.forEach(name=>{for(let d=1;d<=days;d++){const dow=dayOfWeek(y,m,d);if(dow===0||dow===6)continue;const cell=data[`${name}_${d}`]||{};if(!cell.hours||parseFloat(cell.hours)<=0)continue;const lim=calcLimit(cell.hours);if(lim){staffSummary[name].days++;staffSummary[name].total+=lim;grandTotal+=lim;}}});
+  const container=document.getElementById('capacitySection');
+  container.innerHTML='';
+  const summary=document.createElement('div');
+  summary.style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;margin-bottom:14px;';
+  const staffRows=STAFF.map(name=>{const s=staffSummary[name];if(s.days===0)return '';return `<span style="display:inline-block;margin-right:14px;font-size:12px;color:#166534;"><strong>${name}</strong>: ${s.days}日・${s.total}人分</span>`;}).join('');
+  summary.innerHTML=`<div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:6px;">📊 今月の衛生士全体 概算合計</div><div style="font-size:24px;font-weight:700;color:#15803d;margin-bottom:6px;">${grandTotal}<span style="font-size:14px;font-weight:400;color:#166534;">人分（算定上限ベース）</span></div><div style="margin-top:4px;">${staffRows}</div>`;
+  container.appendChild(summary);
+  const grid=document.createElement('div');grid.className='capacity-grid';
+  FACILITIES.forEach(fac=>{
+    const regPts=FAC_PATIENTS[fac],actual=facActual[fac],card=document.createElement('div');
+    card.className='capacity-card';
+    const savedTarget=localStorage.getItem('target_'+fac),defaultTarget=Math.ceil(regPts*2),target=savedTarget?parseInt(savedTarget):defaultTarget;
+    const coverRate=actual.totalLimit>0?Math.round(actual.totalLimit/target*100):0;
+    const rc=coverRate>=100?'ok':coverRate>=70?'warn':'danger';
+    const rt=coverRate>=100?`✅ カバー率 ${coverRate}%`:coverRate>=70?`⚠ カバー率 ${coverRate}%（やや不足）`:`❌ カバー率 ${coverRate}%（不足）`;
+    card.innerHTML=`<div class="capacity-card-name">🏥 ${fac}</div>
+      <div class="capacity-row"><span>登録患者数</span><strong>${regPts}人</strong></div>
+      <div class="capacity-row"><span>月間目標</span><input type="number" value="${target}" min="1" max="999" onchange="saveTarget('${fac}',this.value)" onclick="event.stopPropagation()"></div>
+      <div class="capacity-row"><span>稼働日数</span><strong>${actual.staffDays}日</strong></div>
+      <div class="capacity-row"><span>算定上限合計</span><strong>${actual.totalLimit}人分</strong></div>
+      <div class="capacity-result ${rc}">${rt}</div>`;
+    grid.appendChild(card);
+  });
+  container.appendChild(grid);
+}
+
+function saveTarget(fac,val) { localStorage.setItem('target_'+fac,val); renderCapacity(); }
+
+function getWeekNum(y,m,d) {
+  const date=new Date(y,m-1,d),dow=date.getDay(),monday=new Date(date);
+  monday.setDate(d-((dow+6)%7)); return monday.getTime();
+}
+
+function autoAssign() {
+  const msgEl=document.getElementById('autoAssignMsg');
+  try {
+    const y=currentYear,m=currentMonth,days=daysInMonth(y,m),data=loadData(y,m);
+    const weekFacCount={};STAFF.forEach(s=>{weekFacCount[s]={};});
+    STAFF.forEach(name=>{for(let d=1;d<=days;d++){const cell=data[`${name}_${d}`]||{};if(cell.facility){const wk=getWeekNum(y,m,d);if(!weekFacCount[name][wk])weekFacCount[name][wk]={};weekFacCount[name][wk][cell.facility]=(weekFacCount[name][wk][cell.facility]||0)+1;}}});
+    let count=0;
+    for(let d=1;d<=days;d++){
+      const dow=dayOfWeek(y,m,d); if(dow===0||dow===6) continue;
+      const wk=getWeekNum(y,m,d);
+      const workingToday=STAFF.filter(name=>{const cell=data[`${name}_${d}`]||{};return cell.hours&&parseFloat(cell.hours)>0;});
+      if(workingToday.length===0) continue;
+      const quota={...(SHIFT_RULES.dowQuota[dow]||{'いすみ苑':2,'一宮喜楽園':1,'長生き邑':1})};
+      const dayCount={'いすみ苑':0,'一宮喜楽園':0,'長生き邑':0};
+      workingToday.forEach(name=>{const cell=data[`${name}_${d}`]||{};if(cell.facility)dayCount[cell.facility]=(dayCount[cell.facility]||0)+1;});
+      const unassigned=workingToday.filter(n=>!(data[`${n}_${d}`]||{}).facility);
+      if(dow===4) unassigned.sort((a,b)=>['高梨','吉岡','古阪','南雲','末吉'].indexOf(a)-['高梨','吉岡','古阪','南雲','末吉'].indexOf(b));
+      else if(dow===1) unassigned.sort((a,b)=>['末吉','南雲','古阪','吉岡','高梨'].indexOf(a)-['末吉','南雲','古阪','吉岡','高梨'].indexOf(b));
+      unassigned.forEach(name=>{
+        if(!weekFacCount[name][wk]) weekFacCount[name][wk]={};
+        const dowPrio=SHIFT_RULES.facPriorityByDow[dow];
+        const prio=(dowPrio&&dowPrio[name])||SHIFT_RULES.facPriority[name]||FACILITIES;
+        let best=null;
+        for(const fac of prio){if((dayCount[fac]||0)>=(quota[fac]||0))continue;if((weekFacCount[name][wk][fac]||0)>=SHIFT_RULES.maxPerWeek)continue;best=fac;break;}
+        if(!best){for(const fac of prio){if((dayCount[fac]||0)<(quota[fac]||0)){best=fac;break;}}}
+        if(best){if(!data[`${name}_${d}`])data[`${name}_${d}`]={};data[`${name}_${d}`].facility=best;dayCount[best]++;weekFacCount[name][wk][best]=(weekFacCount[name][wk][best]||0)+1;count++;}
+      });
+    }
+    saveData(y,m,data); render();
+    if(msgEl){msgEl.style.color=count>0?'#15803d':'#6b7280';msgEl.textContent=count>0?`✅ ${count}件割り当て完了`:'⚠ 割り当て対象なし（JSONをインポートしましたか？）';setTimeout(()=>{if(msgEl)msgEl.textContent='';},4000);}
+  }catch(e){console.error(e);if(msgEl){msgEl.style.color='#b91c1c';msgEl.textContent='❌ エラー: '+e.message;}}
+}
+
+function generateSlackDraft(forStaff) {
+  const y=currentYear,m=currentMonth,days=daysInMonth(y,m),data=loadData(y,m),facPat=getFacPatients();
+  const header=forStaff?`📅 *${y}年${m}月 訪問歯科シフト（確定版）*`:`📋 *${y}年${m}月 訪問歯科シフト案* ご確認をお願いします🙏`;
+  let lines=[header,''];
+  for(let d=1;d<=days;d++){
+    const dow=dayOfWeek(y,m,d); if(dow===0||dow===6) continue;
+    const assignments={};
+    STAFF.forEach(name=>{const cell=data[`${name}_${d}`]||{};if(cell.facility&&cell.hours){if(!assignments[cell.facility])assignments[cell.facility]=[];const lim=calcLimit(cell.hours);assignments[cell.facility].push(`${name}（${cell.hours}h・上限${lim??'-'}人）`);}});
+    if(Object.keys(assignments).length===0) continue;
+    lines.push(`*${m}/${d}（${DOW_JP[dow]}）*`);
+    FACILITIES.forEach(fac=>{if(assignments[fac])lines.push(`　🏥 ${fac}（登録${facPat[fac]}人）: ${assignments[fac].join('、')}`);});
+    lines.push('');
+  }
+  lines.push(forStaff?'ご確認よろしくお願いします。変更・要望はこのチャンネルへ💬':'問題なければ「OK」とご返信ください。修正があればお知らせください。');
+  return lines.join('\n');
+}
+
+function openSlackDraftModal() { document.getElementById('slackDraftModal').classList.add('open'); document.getElementById('slackDraftText').textContent=generateSlackDraft(false); document.getElementById('slackDraftMode').dataset.mode='confirm'; }
+function closeSlackDraftModal() { document.getElementById('slackDraftModal').classList.remove('open'); }
+function toggleSlackDraftMode() {
+  const el=document.getElementById('slackDraftMode'),isConfirm=el.dataset.mode==='confirm';
+  el.dataset.mode=isConfirm?'staff':'confirm'; el.textContent=isConfirm?'佐藤Dr確認用に戻す':'スタッフ通知用に切替';
+  document.getElementById('slackDraftText').textContent=generateSlackDraft(!isConfirm);
+  document.getElementById('slackDraftLabel').textContent=isConfirm?'📨 スタッフ通知用テキスト':'📋 佐藤Dr確認用テキスト';
+}
+function copySlackDraft() {
+  navigator.clipboard.writeText(document.getElementById('slackDraftText').textContent).then(()=>{
+    const btn=document.getElementById('copySlackBtn');btn.textContent='✅ コピーしました';setTimeout(()=>{btn.textContent='📋 テキストをコピー';},1800);
+  });
+}
+
+// Close modals on overlay click
+document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+document.getElementById('importModal').addEventListener('click',function(e){if(e.target===this)closeImportModal();});
+document.getElementById('slackDraftModal').addEventListener('click',function(e){if(e.target===this)closeSlackDraftModal();});
+
+// ========================================
+// PAYROLL
+// ========================================
+let payImportedData = {}; // { name: { records, totalHours, facMap } }
+
+// ---- 源泉徴収 自動計算（乙欄・簡易） ----
+// 国税庁 令和6年版 給与所得の源泉徴収税額表（月額表）乙欄 簡易版
+// 課税対象 = 基本給 + 交通費超過分(150,000円超) - 社会保険等(今回は0として計算)
+const WTAX_TABLE_OTSU = [
+  [0,      87999,  0],
+  [88000,  88999,  3400],
+  [89000,  89999,  3500],
+  [90000,  90999,  3500],
+  [91000,  91999,  3500],
+  [92000,  92999,  3600],
+  [93000,  93999,  3600],
+  [94000,  94999,  3600],
+  [95000,  95999,  3700],
+  [96000,  96999,  3700],
+  [97000,  97999,  3800],
+  [98000,  98999,  3800],
+  [99000,  99999,  3900],
+  [100000, 100999, 3900],
+  [101000, 101999, 4000],
+  [102000, 102999, 4000],
+  [103000, 103999, 4100],
+  [104000, 104999, 4100],
+  [105000, 105999, 4200],
+  [106000, 106999, 4200],
+  [107000, 107999, 4300],
+  [108000, 108999, 4300],
+  [109000, 109999, 4400],
+  [110000, 111999, 4400],
+  [112000, 113999, 4600],
+  [114000, 115999, 4800],
+  [116000, 117999, 4900],
+  [118000, 119999, 5100],
+  [120000, 121999, 5300],
+  [122000, 123999, 5400],
+  [124000, 125999, 5600],
+  [126000, 127999, 5800],
+  [128000, 129999, 5900],
+  [130000, 131999, 6100],
+  [132000, 133999, 6300],
+  [134000, 135999, 6400],
+  [136000, 137999, 6600],
+  [138000, 139999, 6800],
+  [140000, 141999, 7100],
+  [142000, 143999, 7300],
+  [144000, 145999, 7600],
+  [146000, 147999, 7800],
+  [148000, 149999, 8100],
+  [150000, 151999, 8300],
+  [152000, 153999, 8600],
+  [154000, 155999, 8900],
+  [156000, 157999, 9100],
+  [158000, 159999, 9400],
+  [160000, 161999, 9700],
+  [162000, 163999, 10000],
+  [164000, 165999, 10200],
+  [166000, 167999, 10500],
+  [168000, 169999, 10800],
+  [170000, 171999, 11100],
+  [172000, 173999, 11400],
+  [174000, 175999, 11600],
+  [176000, 177999, 11900],
+  [178000, 179999, 12200],
+  [180000, 182999, 12600],
+  [183000, 185999, 13000],
+  [186000, 188999, 13400],
+  [189000, 191999, 13800],
+  [192000, 194999, 14200],
+  [195000, 197999, 14600],
+  [198000, 200999, 15000],
+  [201000, 203999, 15400],
+  [204000, 206999, 15800],
+  [207000, 209999, 16200],
+  [210000, 212999, 16700],
+  [213000, 215999, 17100],
+  [216000, 218999, 17500],
+  [219000, 221999, 17900],
+  [222000, 224999, 18300],
+  [225000, 999999999, Math.round],// placeholder — handled below
+];
+
+function calcWithholdingTax(grossPay) {
+  // grossPay = 基本給 (交通費は非課税枠150,000円まで除外済みとする)
+  for (const [lo, hi, tax] of WTAX_TABLE_OTSU) {
+    if (grossPay >= lo && grossPay <= hi) return tax;
+  }
+  // 225,000円超: 乙欄は概算 gross * 0.073 + 1,250 (簡易)
+  if (grossPay > 224999) return Math.round(grossPay * 0.073 + 1250);
+  return 0;
+}
+
+function payGetNum(key) { return parseFloat(localStorage.getItem(key)) || 0; }
+function paySetNum(key, val) { localStorage.setItem(key, val); }
+
+function payIsBonusMonth() {
+  const m = document.getElementById('payTargetMonth').value;
+  if (!m) return false;
+  const month = parseInt(m.split('-')[1]);
+  return month === 6 || month === 12;
+}
+function payBonusLabel() {
+  const m = parseInt((document.getElementById('payTargetMonth').value||'').split('-')[1]);
+  return m === 6 ? '夏季' : '冬季';
+}
+
+// ---- 交通費デフォルト値（座標から算出・往復・15円/km）----
+// 住所: いすみ苑=いすみ市能実615, 一宮喜楽園=一宮町船頭給201, 長生き邑=長生村金田2133
+// 直線距離×道路係数1.3×往復×15円/km で算出。Googleマップで要確認。
+const TRANSPORT_DEFAULTS = {
+  '南雲': { 'いすみ苑': 1660, '一宮喜楽園': 1370, '長生き邑': 980 },  // 千葉市安住ヶ丘東
+  '末吉': { 'いすみ苑':  680, '一宮喜楽園':  430, '長生き邑': 380 },  // 茂原市下長吉
+  '吉岡': { 'いすみ苑':  720, '一宮喜楽園':  470, '長生き邑': 420 },  // 茂原市小林
+  '高梨': { 'いすみ苑':  250, '一宮喜楽園':   80, '長生き邑': 530 },  // 一宮町寅
+  '古阪': { 'いすみ苑':  940, '一宮喜楽園':  630, '長生き邑': 260 },  // 大網白里市大網
+};
+
+function payInitTransportDefaults() {
+  // 未設定の場合のみデフォルト値をセット（手動修正を上書きしない）
+  STAFF.forEach(name => {
+    FACILITIES.forEach(fac => {
+      const key = transportKey(name, fac);
+      if (!localStorage.getItem(key) && TRANSPORT_DEFAULTS[name] && TRANSPORT_DEFAULTS[name][fac]) {
+        paySetNum(key, TRANSPORT_DEFAULTS[name][fac]);
+      }
+    });
+  });
+}
+
+function payInit() {
+  const now = new Date();
+  document.getElementById('payTargetMonth').value = now.getFullYear()+'-'+zeroPad(now.getMonth()+1);
+  payInitTransportDefaults();
+  payBuildImportGrid();
+  payMonthChange();
+}
+
+function payMonthChange() {
+  const isBonus = payIsBonusMonth();
+  const notice = document.getElementById('bonusNotice');
+  if (notice) { notice.style.display = isBonus ? 'block' : 'none'; if (isBonus) document.getElementById('bonusMonthLabel').textContent = payBonusLabel(); }
+  // Show/hide bonus column header
+  const thBonus = document.getElementById('thBonus');
+  if (thBonus) thBonus.style.display = isBonus ? '' : 'none';
+  // Show/hide bonus fields in import grid
+  document.querySelectorAll('.bonus-field').forEach(el => el.style.display = isBonus ? 'flex' : 'none');
+  payRenderTransportTable();
+  payRender();
+}
+
+// ---- 交通費 (transport per person per facility, round-trip) ----
+function transportKey(name, fac) { return `pay_transport_${name}_${fac.replace(/\s/g,'_')}`; }
+function getTransportFare(name, fac) { return payGetNum(transportKey(name, fac)); }
+function setTransportFare(name, fac, val) { paySetNum(transportKey(name, fac), val); }
+
+// Count days per facility from records
+function facDaysMap(name) {
+  const d = payImportedData[name];
+  if (!d) return {};
+  const map = {};
+  d.records.forEach(r => { if (r.fac) map[r.fac] = (map[r.fac]||0) + 1; });
+  return map;
+}
+
+// Auto-calculate total commute for a person
+function calcAutoCommute(name) {
+  const days = facDaysMap(name);
+  let total = 0;
+  FACILITIES.forEach(fac => {
+    const fare = getTransportFare(name, fac);
+    const cnt = days[fac] || 0;
+    total += fare * cnt;
+  });
+  return total;
+}
+
+function payRenderTransportTable() {
+  const tbody = document.getElementById('transportTableBody');
+  if (!tbody) return;
+  const monthLabel = (document.getElementById('payTargetMonth').value||'').replace('-','年')+'月';
+  const th = document.getElementById('thTransportMonth');
+  if (th) th.textContent = monthLabel;
+
+  let rows = '';
+  STAFF.forEach(name => {
+    const days = facDaysMap(name);
+    const autoTotal = calcAutoCommute(name);
+    const hasData = !!payImportedData[name];
+    const totalColor = autoTotal > 0 ? '#0369a1' : '#94a3b8';
+    let cells = FACILITIES.map(fac => {
+      const fare = getTransportFare(name, fac);
+      const cnt = days[fac] || 0;
+      const subtotal = fare * cnt;
+      const hint = hasData && cnt > 0 ? `<div style="font-size:10px;color:#64748b;margin-top:2px;">${cnt}日 × ${fare.toLocaleString()} = ${subtotal.toLocaleString()}円</div>` : (hasData && cnt===0 ? `<div style="font-size:10px;color:#cbd5e1;">0日</div>` : '');
+      return `<td style="border:1px solid #e2e8f0;padding:5px 8px;text-align:center;">
+        <div style="display:flex;align-items:center;gap:3px;justify-content:center;">
+          <input type="number" min="0" step="10" value="${fare||''}" placeholder="0"
+            style="width:72px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:12px;text-align:right;"
+            oninput="setTransportFare('${name}','${fac}',this.value);payRenderTransportTable();payRender();" />
+          <span style="font-size:10px;color:#94a3b8;">円</span>
+        </div>
+        ${hint}
+      </td>`;
+    }).join('');
+    rows += `<tr>
+      <td style="border:1px solid #e2e8f0;padding:7px 10px;font-weight:700;color:#1e293b;white-space:nowrap;">${name}</td>
+      ${cells}
+      <td style="border:1px solid #e2e8f0;padding:7px 10px;text-align:center;font-weight:700;color:${totalColor};background:#f0f9ff;">
+        ${autoTotal > 0 ? autoTotal.toLocaleString()+'円' : (hasData ? '—' : '<span style="color:#cbd5e1;font-size:11px;">CSV未読込</span>')}
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = rows;
+}
+
+function payBuildImportGrid() {
+  const grid = document.getElementById('payImportGrid');
+  grid.innerHTML = '';
+  STAFF.forEach(name => {
+    const rate = payGetNum('pay_rate_'+name) || '';
+    const wtax = payGetNum('pay_wtax_'+name) || '';
+    const bonusKey = 'pay_bonus_'+name+'_'+((document.getElementById('payTargetMonth').value||'').replace('-',''));
+    const bonus = payGetNum(bonusKey) || '';
+    const row = document.createElement('div');
+    row.className = 'staff-import-row';
+    row.innerHTML = `
+      <div class="sir-top">
+        <div class="staff-import-name">${name}</div>
+        <label style="display:none;"><input type="file" accept=".csv" id="payFile_${name}" onchange="payLoadFile('${name}',this)"></label>
+        <button class="import-file-btn" onclick="document.getElementById('payFile_${name}').click()">📂 CSVを読み込む</button>
+        <div class="import-status" id="payStatus_${name}">未インポート</div>
+      </div>
+      <div class="sir-settings">
+        <div class="pay-field">
+          <label>時給</label>
+          <input type="number" id="payRate_${name}" value="${rate}" min="0" step="50" placeholder="1500"
+            oninput="payFieldChange('pay_rate_${name}','${name}',this.value)" />
+          <span>円</span>
+        </div>
+        <div class="pay-field">
+          <label>源泉徴収（手動上書き）</label>
+          <input type="number" id="payWtax_${name}" value="${wtax}" min="0" step="100" placeholder="自動(乙欄)"
+            oninput="payFieldChange('pay_wtax_${name}','${name}',this.value)" />
+          <span>円</span>
+        </div>
+        <div class="pay-field bonus-field">
+          <label>賞与（この月）</label>
+          <input type="number" id="payBonus_${name}" value="${bonus}" min="0" step="1000" placeholder="0"
+            oninput="payBonusChange('${name}',this.value)" />
+          <span>円</span>
+        </div>
+      </div>`;
+    grid.appendChild(row);
+  });
+  const isBonus = payIsBonusMonth();
+  document.querySelectorAll('.bonus-field').forEach(el => el.style.display = isBonus ? 'flex' : 'none');
+  payRenderTransportTable();
+}
+
+function payFieldChange(lsKey, name, val) {
+  paySetNum(lsKey, val);
+  payRender();
+}
+
+function payBonusChange(name, val) {
+  const month = (document.getElementById('payTargetMonth').value||'').replace('-','');
+  paySetNum('pay_bonus_'+name+'_'+month, val);
+  payRender();
+}
+
+function payLoadFile(name, input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = e.target.result;
+      const lines = text.replace(/^﻿/,'').trim().split('\n');
+      if (lines.length < 2) { alert('データが見つかりません'); return; }
+      const records = [];
+      let totalHours = 0;
+      const facMap = {};
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',');
+        if (parts.length < 8) continue;
+        const [staffName, date, dow, fac, inT, outT, breakMin, hoursStr] = parts;
+        const hours = parseFloat(hoursStr) || 0;
+        records.push({ date: date.trim(), dow: dow.trim(), fac: fac.trim(), inT: inT.trim(), outT: outT.trim(), breakMin: parseInt(breakMin)||0, hours });
+        totalHours += hours;
+        if (fac.trim()) facMap[fac.trim()] = (facMap[fac.trim()]||0) + hours;
+      }
+      payImportedData[name] = { records, totalHours, facMap };
+      document.getElementById('payStatus_'+name).textContent = `✅ ${records.length}日分 / 計${totalHours.toFixed(1)}h`;
+      document.getElementById('payStatus_'+name).className = 'import-status loaded';
+      payRenderTransportTable();
+      payRender();
+    } catch(err) { alert('CSVの読み込みエラー: '+err.message); }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function payCalcRow(name) {
+  const d = payImportedData[name];
+  const rate = payGetNum('pay_rate_'+name);
+  const commute = calcAutoCommute(name); // 施設訪問日数 × 往復運賃 で自動計算
+  const month = (document.getElementById('payTargetMonth').value||'').replace('-','');
+  const bonus = payIsBonusMonth() ? payGetNum('pay_bonus_'+name+'_'+month) : 0;
+  const basicPay = d ? Math.round(d.totalHours * rate) : 0;
+  const gross = basicPay + commute + bonus;
+  const manualTax = payGetNum('pay_wtax_'+name);
+  const autoTax = calcWithholdingTax(basicPay);
+  const wtax = manualTax > 0 ? manualTax : autoTax;
+  const net = Math.max(0, gross - wtax);
+  const facDays = facDaysMap(name);
+  // Build commute detail string
+  const commuteDetail = FACILITIES
+    .filter(fac => facDays[fac] && getTransportFare(name,fac))
+    .map(fac => `${fac}${facDays[fac]}日×${getTransportFare(name,fac).toLocaleString()}円`)
+    .join(' / ');
+  return { rate, commute, commuteDetail, bonus, basicPay, gross, autoTax, manualTax, wtax, net,
+    hours: d ? d.totalHours : 0, days: d ? d.records.length : 0, facMap: d ? d.facMap : {}, facDays };
+}
+
+function payRender() {
+  const tbody = document.getElementById('payTableBody');
+  const tfoot = document.getElementById('payTableFoot');
+  const hasData = Object.keys(payImportedData).length > 0;
+  document.getElementById('payResultCard').style.display = hasData ? 'block' : 'none';
+  document.getElementById('payExportBtn').style.display = hasData ? 'block' : 'none';
+  const isBonus = payIsBonusMonth();
+  const thBonus = document.getElementById('thBonus');
+  if (thBonus) thBonus.style.display = isBonus ? '' : 'none';
+  if (!hasData) return;
+
+  let grandBasic=0, grandCommute=0, grandBonus=0, grandGross=0, grandTax=0, grandNet=0;
+  let rows = '';
+
+  STAFF.forEach(name => {
+    const d = payImportedData[name];
+    if (!d) {
+      rows += `<tr><td><strong>${name}</strong></td><td colspan="8" style="color:#94a3b8;font-size:12px;">CSVを読み込んでください</td></tr>`;
+      return;
+    }
+    const c = payCalcRow(name);
+    grandBasic += c.basicPay; grandCommute += c.commute; grandBonus += c.bonus; grandGross += c.gross; grandTax += c.wtax; grandNet += c.net;
+    const facDetail = Object.entries(c.facMap).map(([f,h])=>`${f}:${h.toFixed(1)}h`).join(' ');
+    const taxNote = c.manualTax > 0 ? '手動入力' : '自動(乙欄)';
+    const bonusCell = isBonus ? `<td class="right">${c.bonus>0?c.bonus.toLocaleString()+'円':'—'}</td>` : '';
+    rows += `<tr>
+      <td><strong>${name}</strong><div class="fac-detail">${facDetail||'—'}</div></td>
+      <td class="right">${c.days}日</td>
+      <td class="right">${c.hours.toFixed(1)}h<br><span style="font-size:10px;color:#94a3b8;">${c.rate>0?c.rate.toLocaleString()+'円/h':''}</span></td>
+      <td class="amount">${c.basicPay>0?c.basicPay.toLocaleString()+'円':'—'}</td>
+      <td class="right">${c.commute>0?c.commute.toLocaleString()+'円':'—'}<div class="fac-detail">${c.commuteDetail}</div></td>
+      ${bonusCell}
+      <td class="amount">${c.gross>0?c.gross.toLocaleString()+'円':'—'}</td>
+      <td class="deduct">▲${c.wtax.toLocaleString()}円<div class="wtax-auto">${taxNote}</div></td>
+      <td class="net">${c.net.toLocaleString()}円</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = rows;
+  const bonusFoot = isBonus ? `<td class="right"><strong>${grandBonus>0?grandBonus.toLocaleString()+'円':'—'}</strong></td>` : '';
+  tfoot.innerHTML = `<tr>
+    <td><strong>合計</strong></td><td></td><td></td>
+    <td class="right"><strong>${grandBasic.toLocaleString()}円</strong></td>
+    <td class="right"><strong>${grandCommute>0?grandCommute.toLocaleString()+'円':'—'}</strong></td>
+    ${bonusFoot}
+    <td class="right"><strong>${grandGross.toLocaleString()}円</strong></td>
+    <td class="deduct"><strong>▲${grandTax.toLocaleString()}円</strong></td>
+    <td class="net"><strong>${grandNet.toLocaleString()}円</strong></td>
+  </tr>`;
+}
+
+function payExportCSV() {
+  const month = document.getElementById('payTargetMonth').value || '不明';
+  const isBonus = payIsBonusMonth();
+  const headers = ['氏名','出勤日数','実働時間(h)','時給(円)','基本給(円)','交通費(円)','交通費内訳'];
+  if (isBonus) headers.push('賞与(円)');
+  headers.push('支給合計(円)','源泉徴収(円)','差引支給額(円)','施設別時間内訳');
+  const rows = [headers];
+  STAFF.forEach(name => {
+    const d = payImportedData[name];
+    if (!d) return;
+    const c = payCalcRow(name);
+    const facDetail = Object.entries(c.facMap).map(([f,h])=>`${f}:${h.toFixed(1)}h`).join(' ');
+    const row = [name, c.days, c.hours.toFixed(2), c.rate, c.basicPay, c.commute, c.commuteDetail];
+    if (isBonus) row.push(c.bonus);
+    row.push(c.gross, c.wtax, c.net, facDetail);
+    rows.push(row);
+  });
+  const csv = rows.map(r=>r.map(v=>String(v).includes(',')?`"${v}"`:v).join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `給与明細_${month}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ========================================
+// INIT
+// ========================================
+document.addEventListener('DOMContentLoaded', () => {
+  tcInit();
+});
+</script>
+</body>
+</html>
