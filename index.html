@@ -435,7 +435,7 @@ input[type="number"], input[type="time"], input[type="month"], select {
     <button class="export-btn" onclick="autoAssign()" style="background:rgba(50,220,100,0.25);border-color:rgba(50,220,100,0.6);">🤖 自動割り当て</button>
     <span id="autoAssignMsg" style="font-size:12px;margin-left:8px;"></span>
     <button class="export-btn" onclick="openSlackDraftModal()" style="background:rgba(150,100,255,0.25);border-color:rgba(150,100,255,0.6);">📨 Slack確認依頼</button>
-    <button class="export-btn" id="ghShareBtn" onclick="ghPushShift()" style="background:rgba(30,180,100,0.25);border-color:rgba(30,180,100,0.6);display:none;">☁️ シフトを共有</button>
+    <button class="export-btn" id="ghShareBtn" onclick="ghDownloadShift()" style="background:rgba(30,180,100,0.25);border-color:rgba(30,180,100,0.6);">☁️ シフトを共有</button>
     <button class="export-btn" onclick="ghPullShift(true)" style="background:rgba(30,130,255,0.2);border-color:rgba(30,130,255,0.5);">🔄 最新を取得</button>
     <span id="ghSyncStatus" style="font-size:11px;color:rgba(255,255,255,0.75);margin-left:4px;"></span>
   </div>
@@ -656,15 +656,14 @@ input[type="number"], input[type="time"], input[type="month"], select {
   <div class="pay-card" style="border: 2px solid #fee2e2;">
     <div class="pay-title" style="color:#b91c1c;">⚙️ 管理者メニュー</div>
 
-    <!-- GitHubトークン設定 -->
+    <!-- シフト共有案内 -->
     <div style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #e2e8f0;">
-      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:6px;">☁️ シフト共有設定（GitHubトークン）</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:10px;">設定するとシフト管理タブに「シフトを共有」ボタンが表示されます。衛生士さんは「最新を取得」で確認できます。</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <input type="password" id="ghTokenInput" placeholder="ghp_xxxxxxxxxxxx" style="flex:1;min-width:200px;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;" />
-        <button onclick="ghSaveToken()" style="padding:10px 18px;border:2px solid #1e4d7b;border-radius:8px;background:#1e4d7b;color:#fff;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;">保存</button>
+      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:6px;">☁️ シフト共有の使い方</div>
+      <div style="font-size:12px;color:#64748b;line-height:1.7;">
+        ① シフト管理タブで「☁️ シフトを共有」→ <strong>shift-data.json</strong> がダウンロードされます<br>
+        ② <a href="https://github.com/minoridentalclinic2024-eng/minoridental-/upload/main" target="_blank" style="color:#3b82f6;">GitHubのページ</a> でそのファイルをアップロード<br>
+        ③ 衛生士さんのスマホで「🔄 最新を取得」をタップ
       </div>
-      <div id="ghTokenStatus" style="font-size:12px;margin-top:8px;color:#15803d;"></div>
     </div>
 
     <div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下の操作は元に戻せません。慎重に行ってください。</div>
@@ -722,60 +721,75 @@ const GH_REPO  = 'minoridentalclinic2024-eng/minoridental-';
 const GH_FILE  = 'shift-data.json';
 const GH_RAW   = `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}`;
 const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
-const GH_TOKEN_KEY = 'gh_token';
-
-function ghGetToken() { return localStorage.getItem(GH_TOKEN_KEY) || ''; }
-
-function ghSaveToken() {
-  const t = document.getElementById('ghTokenInput').value.trim();
-  if (!t) { alert('トークンを入力してください'); return; }
-  localStorage.setItem(GH_TOKEN_KEY, t);
-  const s = document.getElementById('ghTokenStatus');
-  s.textContent = '✅ 保存しました。シフト管理タブに「☁️ シフトを共有」ボタンが表示されます。';
-  ghUpdateShareBtn();
-}
 
 function ghUpdateShareBtn() {
+  // ボタンは常に表示（トークン不要）
   const btn = document.getElementById('ghShareBtn');
-  if (btn) btn.style.display = ghGetToken() ? '' : 'none';
-  // トークン入力欄に既存値をマスクして表示
-  const inp = document.getElementById('ghTokenInput');
-  const st  = document.getElementById('ghTokenStatus');
-  if (inp && ghGetToken()) { inp.placeholder = '設定済み（変更する場合は新しいトークンを入力）'; if(st) st.textContent = '✅ トークン設定済み'; }
+  if (btn) btn.style.display = '';
 }
 
-async function ghPushShift() {
-  const token = ghGetToken();
-  if (!token) { alert('GitHubトークンが設定されていません。\n給与計算タブ → 管理者メニューから設定してください。'); return; }
+function ghDownloadShift() {
   const btn = document.getElementById('ghShareBtn');
   const orig = btn.textContent;
-  btn.textContent = '⏳ 共有中...'; btn.disabled = true;
+  btn.textContent = '⏳ 準備中...'; btn.disabled = true;
+
   try {
     const payload = {
       year: currentYear, month: currentMonth,
       data: loadData(currentYear, currentMonth),
       updatedAt: new Date().toISOString()
     };
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));
-    // 既存SHAを取得（更新に必要）
-    let sha = '';
-    try {
-      const r = await fetch(GH_API, { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } });
-      if (r.ok) { const d = await r.json(); sha = d.sha; }
-    } catch(_) {}
-    const body = { message: `シフト更新 ${currentYear}年${currentMonth}月`, content, ...(sha ? {sha} : {}) };
-    const res = await fetch(GH_API, {
-      method: 'PUT',
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error((await res.json()).message || res.status);
-    btn.textContent = '✅ 共有しました！';
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
-    document.getElementById('ghSyncStatus').textContent = `☁️ ${currentMonth}/${new Date().getDate()} 共有済み`;
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'shift-data.json'; a.click();
+    URL.revokeObjectURL(url);
+
+    btn.textContent = '✅ ダウンロード完了';
+    document.getElementById('ghSyncStatus').textContent = '⬆️ GitHubにアップロードしてください';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+
+    // アップロード手順モーダルを表示
+    ghShowUploadGuide();
   } catch(e) {
-    btn.textContent = '❌ エラー'; btn.disabled = false;
-    alert('共有に失敗しました：' + e.message + '\n\nトークンの権限（Contents: Read and write）を確認してください。');
+    btn.textContent = orig; btn.disabled = false;
+    alert('エラー: ' + e.message);
+  }
+}
+
+function ghShowUploadGuide() {
+  let modal = document.getElementById('ghUploadGuideModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'ghUploadGuideModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+        <div style="font-size:20px;font-weight:700;color:#1e4d7b;margin-bottom:12px;">☁️ GitHubにアップロード</div>
+        <div style="font-size:14px;color:#374151;line-height:1.7;">
+          ダウンロードされた <strong>shift-data.json</strong> を以下の手順でアップロードしてください：<br><br>
+          <strong style="color:#1e4d7b;">① </strong><a href="https://github.com/minoridentalclinic2024-eng/minoridental-" target="_blank" style="color:#3b82f6;">GitHubリポジトリを開く</a><br>
+          <strong style="color:#1e4d7b;">② </strong>「Add file」→「Upload files」をクリック<br>
+          <strong style="color:#1e4d7b;">③ </strong><strong>shift-data.json</strong> をドラッグ＆ドロップ<br>
+          <strong style="color:#1e4d7b;">④ </strong>「Commit changes」をクリック<br><br>
+          <span style="font-size:12px;color:#6b7280;">アップロード後、衛生士さんのスマホで「🔄 最新を取得」を押すと反映されます。</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+          <a href="https://github.com/minoridentalclinic2024-eng/minoridental-/upload/main" target="_blank"
+             style="flex:1;background:#1e4d7b;color:#fff;padding:10px 16px;border-radius:8px;text-align:center;font-weight:600;font-size:14px;text-decoration:none;min-width:120px;">
+            📤 GitHubを開く
+          </a>
+          <button onclick="document.getElementById('ghUploadGuideModal').remove()"
+            style="flex:1;background:#f3f4f6;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;min-width:80px;">
+            閉じる
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  } else {
+    modal.style.display = 'flex';
   }
 }
 
