@@ -435,6 +435,9 @@ input[type="number"], input[type="time"], input[type="month"], select {
     <button class="export-btn" onclick="autoAssign()" style="background:rgba(50,220,100,0.25);border-color:rgba(50,220,100,0.6);">🤖 自動割り当て</button>
     <span id="autoAssignMsg" style="font-size:12px;margin-left:8px;"></span>
     <button class="export-btn" onclick="openSlackDraftModal()" style="background:rgba(150,100,255,0.25);border-color:rgba(150,100,255,0.6);">📨 Slack確認依頼</button>
+    <button class="export-btn" id="ghShareBtn" onclick="ghPushShift()" style="background:rgba(30,180,100,0.25);border-color:rgba(30,180,100,0.6);display:none;">☁️ シフトを共有</button>
+    <button class="export-btn" onclick="ghPullShift(true)" style="background:rgba(30,130,255,0.2);border-color:rgba(30,130,255,0.5);">🔄 最新を取得</button>
+    <span id="ghSyncStatus" style="font-size:11px;color:rgba(255,255,255,0.75);margin-left:4px;"></span>
   </div>
 
   <div class="settings-bar">
@@ -652,6 +655,18 @@ input[type="number"], input[type="time"], input[type="month"], select {
   <!-- 管理者メニュー -->
   <div class="pay-card" style="border: 2px solid #fee2e2;">
     <div class="pay-title" style="color:#b91c1c;">⚙️ 管理者メニュー</div>
+
+    <!-- GitHubトークン設定 -->
+    <div style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #e2e8f0;">
+      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:6px;">☁️ シフト共有設定（GitHubトークン）</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:10px;">設定するとシフト管理タブに「シフトを共有」ボタンが表示されます。衛生士さんは「最新を取得」で確認できます。</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input type="password" id="ghTokenInput" placeholder="ghp_xxxxxxxxxxxx" style="flex:1;min-width:200px;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;" />
+        <button onclick="ghSaveToken()" style="padding:10px 18px;border:2px solid #1e4d7b;border-radius:8px;background:#1e4d7b;color:#fff;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;">保存</button>
+      </div>
+      <div id="ghTokenStatus" style="font-size:12px;margin-top:8px;color:#15803d;"></div>
+    </div>
+
     <div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下の操作は元に戻せません。慎重に行ってください。</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
       <button onclick="resetAllData()" style="padding:12px 20px;border:2px solid #ef4444;border-radius:10px;background:#fff;color:#b91c1c;font-size:13px;font-weight:700;cursor:pointer;min-height:48px;">🗑 全データをリセット</button>
@@ -697,6 +712,89 @@ function switchTab(tab) {
     } else {
       pinShowLock();
     }
+  }
+}
+
+// ========================================
+// GITHUB SHIFT SYNC
+// ========================================
+const GH_REPO  = 'minoridentalclinic2024-eng/minoridental-';
+const GH_FILE  = 'shift-data.json';
+const GH_RAW   = `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}`;
+const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+const GH_TOKEN_KEY = 'gh_token';
+
+function ghGetToken() { return localStorage.getItem(GH_TOKEN_KEY) || ''; }
+
+function ghSaveToken() {
+  const t = document.getElementById('ghTokenInput').value.trim();
+  if (!t) { alert('トークンを入力してください'); return; }
+  localStorage.setItem(GH_TOKEN_KEY, t);
+  const s = document.getElementById('ghTokenStatus');
+  s.textContent = '✅ 保存しました。シフト管理タブに「☁️ シフトを共有」ボタンが表示されます。';
+  ghUpdateShareBtn();
+}
+
+function ghUpdateShareBtn() {
+  const btn = document.getElementById('ghShareBtn');
+  if (btn) btn.style.display = ghGetToken() ? '' : 'none';
+  // トークン入力欄に既存値をマスクして表示
+  const inp = document.getElementById('ghTokenInput');
+  const st  = document.getElementById('ghTokenStatus');
+  if (inp && ghGetToken()) { inp.placeholder = '設定済み（変更する場合は新しいトークンを入力）'; if(st) st.textContent = '✅ トークン設定済み'; }
+}
+
+async function ghPushShift() {
+  const token = ghGetToken();
+  if (!token) { alert('GitHubトークンが設定されていません。\n給与計算タブ → 管理者メニューから設定してください。'); return; }
+  const btn = document.getElementById('ghShareBtn');
+  const orig = btn.textContent;
+  btn.textContent = '⏳ 共有中...'; btn.disabled = true;
+  try {
+    const payload = {
+      year: currentYear, month: currentMonth,
+      data: loadData(currentYear, currentMonth),
+      updatedAt: new Date().toISOString()
+    };
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));
+    // 既存SHAを取得（更新に必要）
+    let sha = '';
+    try {
+      const r = await fetch(GH_API, { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } });
+      if (r.ok) { const d = await r.json(); sha = d.sha; }
+    } catch(_) {}
+    const body = { message: `シフト更新 ${currentYear}年${currentMonth}月`, content, ...(sha ? {sha} : {}) };
+    const res = await fetch(GH_API, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error((await res.json()).message || res.status);
+    btn.textContent = '✅ 共有しました！';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
+    document.getElementById('ghSyncStatus').textContent = `☁️ ${currentMonth}/${new Date().getDate()} 共有済み`;
+  } catch(e) {
+    btn.textContent = '❌ エラー'; btn.disabled = false;
+    alert('共有に失敗しました：' + e.message + '\n\nトークンの権限（Contents: Read and write）を確認してください。');
+  }
+}
+
+async function ghPullShift(showMsg = false) {
+  const statusEl = document.getElementById('ghSyncStatus');
+  if (statusEl) statusEl.textContent = '🔄 取得中...';
+  try {
+    const res = await fetch(GH_RAW + '?t=' + Date.now());
+    if (!res.ok) { if (statusEl) statusEl.textContent = '（共有データなし）'; return; }
+    const payload = await res.json();
+    // データをローカルに保存して再描画
+    localStorage.setItem(storeKey(payload.year, payload.month), JSON.stringify(payload.data));
+    if (payload.year === currentYear && payload.month === currentMonth) render();
+    const d = new Date(payload.updatedAt);
+    const label = `☁️ ${d.getMonth()+1}/${d.getDate()} ${zeroPad(d.getHours())}:${zeroPad(d.getMinutes())} 更新`;
+    if (statusEl) statusEl.textContent = label;
+    if (showMsg) { const m=document.getElementById('autoAssignMsg'); if(m){m.textContent='✅ 最新データを読み込みました';setTimeout(()=>{m.textContent='';},2500);} }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '（取得失敗）';
   }
 }
 
@@ -1237,7 +1335,9 @@ function saveDefaultHours(h) { localStorage.setItem('default_hours', JSON.string
 function shiftInit() {
   const now = new Date();
   currentYear = now.getFullYear(); currentMonth = now.getMonth()+1;
+  ghUpdateShareBtn();
   render();
+  ghPullShift(false); // 最新シフトを自動取得
 }
 
 function resetMonthData() {
