@@ -73,8 +73,9 @@
       "facility": "いすみ苑"
     },
     "南雲_20": {
-      "hours": "6",
-      "facility": "長生き邑"
+      "hours": "",
+      "facility": "長生き邑",
+      "patients": ""
     },
     "南雲_23": {
       "hours": "6",
@@ -174,7 +175,12 @@
       "hours": "2.5",
       "facility": "口腔衛生管理加算",
       "patients": ""
+    },
+    "南雲_21": {
+      "hours": "6",
+      "facility": "一宮喜楽園",
+      "patients": ""
     }
   },
-  "updatedAt": "2026-06-30T05:51:23.154Z"
+  "updatedAt": "2026-06-30T05:53:37.407Z"
 }
