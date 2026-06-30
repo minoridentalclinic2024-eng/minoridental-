@@ -1657,7 +1657,7 @@ function generateSlackDraft(forStaff) {
     STAFF.forEach(name=>{const cell=data[`${name}_${d}`]||{};if(cell.facility&&cell.hours){if(!assignments[cell.facility])assignments[cell.facility]=[];const lim=calcLimit(cell.hours);assignments[cell.facility].push(`${name}（${cell.hours}h・上限${lim??'-'}人）`);}});
     if(Object.keys(assignments).length===0) continue;
     lines.push(`*${m}/${d}（${DOW_JP[dow]}）*`);
-    FACILITIES.forEach(fac=>{if(assignments[fac])lines.push(`　🏥 ${fac}（登録${facPat[fac]}人）: ${assignments[fac].join('、')}`);});
+    FACILITIES.forEach(fac=>{if(assignments[fac])lines.push(`　🏥 ${fac}: ${assignments[fac].join('、')}`);});
     lines.push('');
   }
   lines.push(forStaff?'ご確認よろしくお願いします。変更・要望はこのチャンネルへ💬':'問題なければ「OK」とご返信ください。修正があればお知らせください。');
