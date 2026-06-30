@@ -398,8 +398,24 @@ input[type="number"], input[type="time"], input[type="month"], select {
       <div class="fac-breakdown" id="tcFacBreakdown"></div>
     </div>
 
-    <div style="margin: 0 16px 32px;">
+    <div style="margin: 0 16px 8px;">
       <button class="tc-export-btn" onclick="tcExportCSV()">📥 CSVで書き出し（給与計算用）</button>
+    </div>
+    <div style="margin: 0 16px 32px;">
+      <button class="tc-export-btn" onclick="tcOpenSlackModal()" style="background:#4A154B;color:#fff;border-color:#4A154B;">📨 Slackに送る</button>
+    </div>
+  </div>
+
+  <!-- Slack送信モーダル -->
+  <div id="tcSlackModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)tcCloseSlackModal()">
+    <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:24px 20px 36px;max-height:85vh;overflow-y:auto;box-shadow:0 -4px 30px rgba(0,0,0,0.2);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:16px;font-weight:700;color:#4A154B;">📨 Slack送信テキスト</div>
+        <button onclick="tcCloseSlackModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;">×</button>
+      </div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:10px;">以下のテキストをコピーしてSlackに貼り付けてください。</div>
+      <pre id="tcSlackText" style="background:#1a1d23;color:#e2e8f0;border-radius:10px;padding:14px;font-size:12px;line-height:1.7;white-space:pre-wrap;max-height:320px;overflow-y:auto;font-family:monospace;"></pre>
+      <button id="tcSlackCopyBtn" onclick="tcCopySlack()" style="margin-top:12px;width:100%;padding:14px;border:none;border-radius:10px;background:#4A154B;color:#fff;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📋 テキストをコピー</button>
     </div>
   </div>
 
@@ -415,7 +431,7 @@ input[type="number"], input[type="time"], input[type="month"], select {
     <button onclick="nextMonth()">▶</button>
     <button class="export-btn" onclick="shiftExportCSV()">📥 CSV出力</button>
     <button class="export-btn" onclick="openImportModal()" style="background:rgba(255,220,50,0.2);border-color:rgba(255,220,50,0.6);">⚡ Slackから読み込む</button>
-    <button class="export-btn" onclick="resetMonthData()" style="background:rgba(220,50,50,0.15);border-color:rgba(220,50,50,0.5);color:#b91c1c;">🗑 月データをリセット</button>
+    <button class="export-btn" onclick="pinVerify(resetMonthData)" style="background:rgba(220,50,50,0.15);border-color:rgba(220,50,50,0.5);color:#b91c1c;">🗑 月データをリセット</button>
     <button class="export-btn" onclick="autoAssign()" style="background:rgba(50,220,100,0.25);border-color:rgba(50,220,100,0.6);">🤖 自動割り当て</button>
     <span id="autoAssignMsg" style="font-size:12px;margin-left:8px;"></span>
     <button class="export-btn" onclick="openSlackDraftModal()" style="background:rgba(150,100,255,0.25);border-color:rgba(150,100,255,0.6);">📨 Slack確認依頼</button>
@@ -526,7 +542,8 @@ input[type="number"], input[type="time"], input[type="month"], select {
       </div>
     </div>
   </div>
-</div>
+
+</div><!-- /sh-tab -->
 
 <!-- ===== PAYROLL TAB ===== -->
 <div id="pay-tab" class="tab-panel">
@@ -628,9 +645,20 @@ input[type="number"], input[type="time"], input[type="month"], select {
     </div>
   </div>
 
-  <div style="padding: 0 0 32px;">
+  <div style="padding: 0 0 16px;">
     <button class="pay-export-btn" onclick="payExportCSV()" id="payExportBtn" style="display:none;">📥 給与明細CSVで書き出し</button>
   </div>
+
+  <!-- 管理者メニュー -->
+  <div class="pay-card" style="border: 2px solid #fee2e2;">
+    <div class="pay-title" style="color:#b91c1c;">⚙️ 管理者メニュー</div>
+    <div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下の操作は元に戻せません。慎重に行ってください。</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button onclick="resetAllData()" style="padding:12px 20px;border:2px solid #ef4444;border-radius:10px;background:#fff;color:#b91c1c;font-size:13px;font-weight:700;cursor:pointer;min-height:48px;">🗑 全データをリセット</button>
+      <button onclick="pinStartSetup()" style="padding:12px 20px;border:2px solid #6b7280;border-radius:10px;background:#fff;color:#374151;font-size:13px;font-weight:700;cursor:pointer;min-height:48px;">🔑 暗証番号を変更</button>
+    </div>
+  </div>
+  <div style="height:32px;"></div>
 </div><!-- /payContent -->
 
 </div><!-- /pay-tab -->
@@ -681,6 +709,15 @@ let pinSetupStep = 0; // 0=none, 1=enter new, 2=confirm new
 let pinSetupFirst = '';
 
 function pinGetStored() { return localStorage.getItem(PIN_KEY) || ''; }
+
+function resetAllData() {
+  if (!confirm('⚠️ すべてのデータ（タイムカード・シフト・給与設定）を完全に削除します。\nこの操作は元に戻せません。本当によろしいですか？')) return;
+  const pin = localStorage.getItem(PIN_KEY);
+  localStorage.clear();
+  if (pin) localStorage.setItem(PIN_KEY, pin); // PINは残す
+  alert('✅ データをリセットしました。PINはそのまま保持されています。');
+  location.reload();
+}
 
 function pinShowLock() {
   const stored = pinGetStored();
@@ -782,6 +819,64 @@ function pinSubmit() {
 }
 
 // ========================================
+// PIN VERIFY (for protected actions)
+// ========================================
+let pinVerifyCallback = null;
+let pinVerifyBuffer = '';
+
+function pinVerify(callback) {
+  const stored = pinGetStored();
+  if (!stored) { callback(); return; } // PIN未設定なら直接実行
+  pinVerifyCallback = callback;
+  pinVerifyBuffer = '';
+  document.getElementById('pvError').textContent = '';
+  pvRenderDots();
+  const ov = document.getElementById('pinVerifyOverlay');
+  ov.style.display = 'flex';
+}
+
+function pvRenderDots() {
+  for (let i = 0; i < 4; i++) {
+    const d = document.getElementById('pv-pd' + i);
+    if (d) d.classList.toggle('filled', i < pinVerifyBuffer.length);
+  }
+}
+
+function pvKey(digit) {
+  if (pinVerifyBuffer.length >= 4) return;
+  pinVerifyBuffer += digit;
+  pvRenderDots();
+  if (pinVerifyBuffer.length === 4) setTimeout(pvSubmit, 150);
+}
+
+function pvDel() {
+  pinVerifyBuffer = pinVerifyBuffer.slice(0, -1);
+  pvRenderDots();
+  document.getElementById('pvError').textContent = '';
+}
+
+function pvSubmit() {
+  const stored = pinGetStored();
+  if (pinVerifyBuffer === stored) {
+    document.getElementById('pinVerifyOverlay').style.display = 'none';
+    if (pinVerifyCallback) { pinVerifyCallback(); pinVerifyCallback = null; }
+  } else {
+    document.getElementById('pvError').textContent = '番号が違います。';
+    pinVerifyBuffer = '';
+    pvRenderDots();
+    const box = document.querySelector('#pinVerifyOverlay .pin-box');
+    box.style.animation = 'pinShake 0.4s';
+    box.addEventListener('animationend', () => { box.style.animation = ''; }, { once: true });
+  }
+}
+
+function pvCancel() {
+  document.getElementById('pinVerifyOverlay').style.display = 'none';
+  pinVerifyCallback = null;
+  pinVerifyBuffer = '';
+}
+
+// ========================================
 // TIMECARD
 // ========================================
 let tcCurrentName = '';
@@ -829,6 +924,10 @@ function tcShowMain() {
   });
   tcViewYear = now.getFullYear(); tcViewMonth = now.getMonth() + 1;
   tcSelectBreak(90);
+  // デフォルト時刻を設定（既存記録があれば上書きされる）
+  document.getElementById('tcInTime').value = '09:30';
+  document.getElementById('tcOutTime').value = '17:00';
+  tcUpdateStatus();
   tcLoadTodayRecord();
   tcRenderView();
 }
@@ -932,12 +1031,12 @@ function tcCancelEdit() {
   document.getElementById('tcEditBanner').style.display = 'none';
   const now = new Date();
   document.getElementById('tcTodayLabel').textContent = '📅 '+now.getFullYear()+'/'+zeroPad(now.getMonth()+1)+'/'+zeroPad(now.getDate())+'（'+DOW_JP[now.getDay()]+'）の記録';
-  document.getElementById('tcInTime').value = '';
-  document.getElementById('tcOutTime').value = '';
+  document.getElementById('tcInTime').value = '09:30';
+  document.getElementById('tcOutTime').value = '17:00';
   document.getElementById('tcPunchOutBtn').classList.remove('ready');
   tcSelectedFac = '';
   document.querySelectorAll('#tcFacBtns .fac-btn').forEach(b => b.classList.remove('selected'));
-  tcSelectBreak(90); tcLoadTodayRecord();
+  tcSelectBreak(90); tcUpdateStatus(); tcLoadTodayRecord();
 }
 
 function tcSaveRecord() {
@@ -1037,6 +1136,66 @@ function tcExportCSV() {
   a.download = 'タイムカード_'+tcCurrentName+'_'+tcViewYear+zeroPad(tcViewMonth)+'.csv';
   a.click(); URL.revokeObjectURL(a.href);
   tcShowToast('📥 CSVをダウンロードしました');
+}
+
+function tcGenerateSlackText() {
+  const recs = tcLoadRecs(tcCurrentName);
+  const prefix = tcViewYear + '-' + zeroPad(tcViewMonth) + '-';
+  const keys = Object.keys(recs).filter(k => k.startsWith(prefix)).sort();
+  if (keys.length === 0) return null;
+
+  const ym = tcViewYear + '年' + tcViewMonth + '月';
+  let totalNet = 0, totalDays = 0;
+  const facMap = {};
+  const lines = [];
+
+  keys.forEach(key => {
+    const rec = recs[key];
+    const d = new Date(key + 'T00:00:00');
+    const day = parseInt(key.split('-')[2]);
+    const dow = DOW_JP[d.getDay()];
+    if (rec.in && rec.out) {
+      const net = tcCalcNet(rec.in, rec.out, rec.break || 0);
+      totalNet += net;
+      totalDays++;
+      const fac = rec.fac || '未記入';
+      facMap[fac] = (facMap[fac] || 0) + 1;
+      const breakStr = rec.break ? `休憩${rec.break}分` : '休憩なし';
+      lines.push(`${day}日(${dow}) ${fac}　${rec.in}〜${rec.out}　${breakStr}　*${net.toFixed(1)}h*`);
+    } else {
+      lines.push(`${day}日(${dow}) —`);
+    }
+  });
+
+  const facDetail = Object.entries(facMap).map(([f, n]) => `${f}×${n}日`).join('、');
+
+  return `【タイムカード報告】${tcCurrentName} ${ym}分\n` +
+    `${'─'.repeat(28)}\n` +
+    lines.join('\n') +
+    `\n${'─'.repeat(28)}\n` +
+    `勤務日数：*${totalDays}日*　合計実働：*${totalNet.toFixed(1)}h*\n` +
+    `施設内訳：${facDetail}`;
+}
+
+function tcOpenSlackModal() {
+  const text = tcGenerateSlackText();
+  if (!text) { tcShowToast('⚠ この月の記録がありません'); return; }
+  document.getElementById('tcSlackText').textContent = text;
+  document.getElementById('tcSlackCopyBtn').textContent = '📋 テキストをコピー';
+  document.getElementById('tcSlackModal').style.display = 'flex';
+}
+
+function tcCloseSlackModal() {
+  document.getElementById('tcSlackModal').style.display = 'none';
+}
+
+function tcCopySlack() {
+  const text = document.getElementById('tcSlackText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('tcSlackCopyBtn');
+    btn.textContent = '✅ コピーしました！';
+    setTimeout(() => { btn.textContent = '📋 テキストをコピー'; }, 2000);
+  });
 }
 
 function tcShowToast(msg) {
@@ -1818,5 +1977,36 @@ document.addEventListener('DOMContentLoaded', () => {
   tcInit();
 });
 </script>
+
+<!-- PIN VERIFY OVERLAY (for protected actions like data reset) -->
+<div id="pinVerifyOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;padding:24px;">
+  <div class="pin-box">
+    <div class="pin-icon">🔐</div>
+    <div class="pin-title">暗証番号を確認</div>
+    <div class="pin-sub">管理者のみ実行できます</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pv-pd0"></div>
+      <div class="pin-dot" id="pv-pd1"></div>
+      <div class="pin-dot" id="pv-pd2"></div>
+      <div class="pin-dot" id="pv-pd3"></div>
+    </div>
+    <div class="pin-numpad">
+      <button class="pin-key" onclick="pvKey('1')">1</button>
+      <button class="pin-key" onclick="pvKey('2')">2</button>
+      <button class="pin-key" onclick="pvKey('3')">3</button>
+      <button class="pin-key" onclick="pvKey('4')">4</button>
+      <button class="pin-key" onclick="pvKey('5')">5</button>
+      <button class="pin-key" onclick="pvKey('6')">6</button>
+      <button class="pin-key" onclick="pvKey('7')">7</button>
+      <button class="pin-key" onclick="pvKey('8')">8</button>
+      <button class="pin-key" onclick="pvKey('9')">9</button>
+      <button class="pin-key zero" onclick="pvKey('0')">0</button>
+      <button class="pin-key del" onclick="pvDel()">⌫</button>
+    </div>
+    <div class="pin-error" id="pvError"></div>
+    <div class="pin-setup-link" onclick="pvCancel()" style="display:block;">キャンセル</div>
+  </div>
+</div>
+
 </body>
 </html>
