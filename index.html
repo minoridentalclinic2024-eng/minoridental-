@@ -159,7 +159,7 @@ input[type="number"], input[type="time"], input[type="month"], select {
 #sh-tab .staff-col { background: var(--blue-dark) !important; color: #fff; font-weight: 700; font-size: 13px; text-align: center; padding: 8px 4px; }
 #sh-tab .shift-cell { cursor: pointer; min-width: 72px; text-align: center; vertical-align: top; position: relative; }
 #sh-tab .shift-cell.empty { background: var(--gray-50); }
-#sh-tab .shift-cell.weekend { background: var(--gray-100); cursor: default; }
+#sh-tab .shift-cell.weekend { background: #f0f4ff; cursor: pointer; }
 #sh-tab .shift-cell.has-data { background: #fff; }
 #sh-tab .shift-cell.over-limit { background: var(--red-light); }
 #sh-tab .shift-cell.over-limit .cell-patients { color: var(--red); font-weight: 700; }
@@ -1441,12 +1441,11 @@ function renderTable(y,m) {
       const limit = calcLimit(hours);
       const isOff = !hours||hours==='';
       const over = !isOff&&limit!==null&&patients!==''&&parseInt(patients)>limit;
-      if(isWE) {
-        tbody += `<td class="shift-cell weekend"><div class="cell-inner"><span class="cell-off">休</span></div></td>`;
-      } else {
+      {
         if(patients!=='') monthTotal += parseInt(patients)||0;
-        tbody += `<td class="shift-cell ${over?'over-limit':'has-data'}" onclick="openModal('${name}',${d},'${isWE}')"><div class="cell-inner">`;
-        if(isOff) tbody += `<span class="cell-off">休み</span>`;
+        const weClass = isWE ? ' weekend' : '';
+        tbody += `<td class="shift-cell${weClass} ${over?'over-limit':'has-data'}" onclick="openModal('${name}',${d})"><div class="cell-inner">`;
+        if(isOff) tbody += `<span class="cell-off">${isWE?'休':'休み'}</span>`;
         else {
           if(facility) tbody += `<div class="cell-facility">${facility}</div>`;
           tbody += `<div class="cell-hours">${hours}h → 上限<span class="cell-limit">${limit}人</span></div>`;
@@ -1487,8 +1486,7 @@ function renderFacSummary(y,m) {
   });
 }
 
-function openModal(name,day,isWeekend) {
-  if(isWeekend==='true') return;
+function openModal(name,day) {
   const y=currentYear,m=currentMonth,data=loadData(y,m),defaults=loadDefaultHours();
   const key=`${name}_${day}`,cell=data[key]||{},dow=dayOfWeek(y,m,day);
   editKey={name,day};
