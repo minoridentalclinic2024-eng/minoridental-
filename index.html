@@ -398,8 +398,9 @@ input[type="number"], input[type="time"], input[type="month"], select {
       <div class="fac-breakdown" id="tcFacBreakdown"></div>
     </div>
 
-    <div style="margin: 0 16px 8px;">
+    <div style="margin: 0 16px 8px; display:flex; gap:8px; flex-wrap:wrap;">
       <button class="tc-export-btn" onclick="tcExportCSV()">📥 CSVで書き出し（給与計算用）</button>
+      <button class="tc-export-btn" onclick="tcDownloadForSync()" style="background:rgba(30,180,100,0.15);border-color:rgba(30,180,100,0.6);color:#15803d;">☁️ タイムカードを共有</button>
     </div>
     <div style="margin: 0 16px 32px;">
       <button class="tc-export-btn" onclick="tcOpenSlackModal()" style="background:#4A154B;color:#fff;border-color:#4A154B;">📨 Slackに送る</button>
@@ -620,6 +621,14 @@ input[type="number"], input[type="time"], input[type="month"], select {
 
     <div style="font-size:13px;color:#64748b;margin-bottom:10px;">
       各スタッフのCSVをインポートしてください。源泉徴収は空欄で自動計算（乙欄）、手動で上書きも可能です。
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <button onclick="payFetchAllFromGitHub()" id="payGhFetchBtn"
+        style="width:100%;padding:13px;border:2px solid rgba(30,180,100,0.6);border-radius:10px;background:rgba(30,180,100,0.1);color:#15803d;font-size:14px;font-weight:700;cursor:pointer;">
+        ☁️ 全員分のタイムカードをGitHubから取込
+      </button>
+      <div id="payGhFetchStatus" style="font-size:12px;color:#64748b;margin-top:4px;text-align:center;"></div>
     </div>
 
     <div class="staff-import-grid" id="payImportGrid"></div>
@@ -1227,6 +1236,83 @@ function tcDeleteRecord(key) {
   const recs = tcLoadRecs(tcCurrentName);
   delete recs[key]; tcSaveRecs(tcCurrentName, recs);
   tcRenderView(); tcShowToast('削除しました');
+}
+
+function tcDownloadForSync() {
+  const recs = tcLoadRecs(tcCurrentName);
+  const prefix = tcViewYear + '-' + zeroPad(tcViewMonth) + '-';
+  const monthRecs = {};
+  Object.entries(recs).filter(([k]) => k.startsWith(prefix)).forEach(([k, v]) => { monthRecs[k] = v; });
+  if (Object.keys(monthRecs).length === 0) { tcShowToast('⚠ この月の記録がありません'); return; }
+  const payload = { name: tcCurrentName, year: tcViewYear, month: tcViewMonth, records: monthRecs, updatedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tc-${tcCurrentName}-${tcViewYear}-${zeroPad(tcViewMonth)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  tcShowToast('✅ ダウンロードしました。佐藤さんに送ってください！');
+
+  // アップロード案内モーダル
+  let modal = document.getElementById('tcSyncGuideModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'tcSyncGuideModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:380px;width:100%;">
+        <div style="font-size:18px;font-weight:700;color:#1e4d7b;margin-bottom:12px;">☁️ タイムカード共有</div>
+        <div style="font-size:14px;color:#374151;line-height:1.8;">
+          <strong>tc-${tcCurrentName}-${tcViewYear}-${zeroPad(tcViewMonth)}.json</strong> がダウンロードされました。<br><br>
+          このファイルをLINEやSlackで<strong>佐藤さんに送ってください</strong。<br>
+          <span style="font-size:12px;color:#6b7280;">佐藤さんがGitHubにアップ→給与計算に反映されます。</span>
+        </div>
+        <button onclick="document.getElementById('tcSyncGuideModal').remove()"
+          style="margin-top:16px;width:100%;padding:12px;border:none;background:#1e4d7b;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">
+          OK
+        </button>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  } else { modal.style.display = 'flex'; }
+}
+
+async function payFetchAllFromGitHub() {
+  const monthVal = document.getElementById('payTargetMonth').value;
+  if (!monthVal) { alert('対象月を選択してください'); return; }
+  const [year, monthStr] = monthVal.split('-');
+  const month = parseInt(monthStr);
+  const mm = zeroPad(month);
+  const btn = document.getElementById('payGhFetchBtn');
+  const statusEl = document.getElementById('payGhFetchStatus');
+  btn.disabled = true; btn.textContent = '⏳ 取込中...';
+  statusEl.textContent = '';
+  let successCount = 0;
+  for (const name of STAFF) {
+    const url = `https://raw.githubusercontent.com/${GH_REPO}/main/tc-${name}-${year}-${mm}.json?t=${Date.now()}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) { document.getElementById('payStatus_'+name).textContent = '（データなし）'; document.getElementById('payStatus_'+name).className = 'import-status'; continue; }
+      const payload = await res.json();
+      const records = []; let totalHours = 0; const facMap = {};
+      Object.entries(payload.records).sort(([a],[b])=>a.localeCompare(b)).forEach(([dateKey, rec]) => {
+        if (rec.in && rec.out) {
+          const hours = tcCalcNet(rec.in, rec.out, rec.break||0);
+          const d = new Date(dateKey + 'T00:00:00');
+          records.push({ date: dateKey, dow: DOW_JP[d.getDay()], fac: rec.fac||'', inT: rec.in, outT: rec.out, breakMin: rec.break||0, hours });
+          totalHours += hours;
+          if (rec.fac) facMap[rec.fac] = (facMap[rec.fac]||0) + hours;
+        }
+      });
+      payImportedData[name] = { records, totalHours, facMap };
+      document.getElementById('payStatus_'+name).textContent = `✅ ${records.length}日分 / 計${totalHours.toFixed(1)}h`;
+      document.getElementById('payStatus_'+name).className = 'import-status loaded';
+      successCount++;
+    } catch(e) { document.getElementById('payStatus_'+name).textContent = '（取得失敗）'; document.getElementById('payStatus_'+name).className = 'import-status'; }
+  }
+  payRenderTransportTable(); payRender();
+  btn.textContent = '☁️ 全員分のタイムカードをGitHubから取込'; btn.disabled = false;
+  statusEl.textContent = successCount > 0 ? `✅ ${successCount}人分を取込みました` : '（まだGitHubにデータがありません）';
 }
 
 function tcExportCSV() {
