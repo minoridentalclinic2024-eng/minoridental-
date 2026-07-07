@@ -665,14 +665,29 @@ input[type="number"], input[type="time"], input[type="month"], select {
   <div class="pay-card" style="border: 2px solid #fee2e2;">
     <div class="pay-title" style="color:#b91c1c;">⚙️ 管理者メニュー</div>
 
-    <!-- シフト共有案内 -->
+    <!-- 自動同期トークン設定 -->
     <div style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #e2e8f0;">
-      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:6px;">☁️ シフト共有の使い方</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.7;">
-        ① シフト管理タブで「☁️ シフトを共有」→ <strong>shift-data.json</strong> がダウンロードされます<br>
-        ② <a href="https://github.com/minoridentalclinic2024-eng/minoridental-/upload/main" target="_blank" style="color:#3b82f6;">GitHubのページ</a> でそのファイルをアップロード<br>
-        ③ 衛生士さんのスマホで「🔄 最新を取得」をタップ
+      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:8px;">☁️ シフト自動同期（GitHubトークン）</div>
+      <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:10px;">
+        トークンを登録すると、シフトを保存した瞬間に全員の端末へ自動反映されます。<br>
+        トークンは <a href="https://github.com/settings/tokens/new?scopes=repo&description=%E8%A1%9B%E7%94%9F%E5%A3%AB%E7%AE%A1%E7%90%86" target="_blank" style="color:#3b82f6;">GitHub → Settings → Personal access tokens</a> で発行（Contentsを Read &amp; write に）
       </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input id="ghTokenInput" type="password" placeholder="github_pat_..." style="flex:1;min-width:200px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-family:monospace;" />
+        <button onclick="ghSaveToken()" style="padding:9px 16px;background:#1e4d7b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">保存</button>
+        <button onclick="localStorage.removeItem('gh_token');document.getElementById('ghTokenStatus').textContent='🗑 削除しました';ghUpdateShareBtn();" style="padding:9px 14px;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap;">削除</button>
+      </div>
+      <div id="ghTokenStatus" style="font-size:12px;color:#059669;margin-top:6px;"></div>
+      <script>
+        (function() {
+          const inp = document.getElementById('ghTokenInput');
+          const sta = document.getElementById('ghTokenStatus');
+          if (inp && localStorage.getItem('gh_token')) {
+            inp.placeholder = '（登録済み）';
+            sta.textContent = '✅ トークン登録済み。シフト保存時に自動でGitHubへ共有されます。';
+          }
+        })();
+      </script>
     </div>
 
     <div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下の操作は元に戻せません。慎重に行ってください。</div>
@@ -726,15 +741,55 @@ function switchTab(tab) {
 // ========================================
 // GITHUB SHIFT SYNC
 // ========================================
-const GH_REPO  = 'minoridentalclinic2024-eng/minoridental-';
-const GH_FILE  = 'shift-data.json';
-const GH_RAW   = `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}`;
-const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+const GH_REPO      = 'minoridentalclinic2024-eng/minoridental-';
+const GH_FILE      = 'shift-data.json';
+const GH_RAW       = `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}`;
+const GH_API       = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+const GH_TOKEN_KEY = 'gh_token';
+
+function ghGetToken() { return localStorage.getItem(GH_TOKEN_KEY) || ''; }
+
+function ghSaveToken() {
+  const t = document.getElementById('ghTokenInput').value.trim();
+  if (!t) { alert('トークンを入力してください'); return; }
+  localStorage.setItem(GH_TOKEN_KEY, t);
+  document.getElementById('ghTokenStatus').textContent = '✅ 保存しました。シフト保存時に自動でGitHubに共有されます。';
+  ghUpdateShareBtn();
+}
 
 function ghUpdateShareBtn() {
-  // ボタンは常に表示（トークン不要）
   const btn = document.getElementById('ghShareBtn');
-  if (btn) btn.style.display = '';
+  if (!btn) return;
+  if (ghGetToken()) {
+    btn.textContent = '☁️ 今すぐ共有';
+    btn.onclick = () => ghPushShift();
+  } else {
+    btn.textContent = '☁️ シフトを共有';
+    btn.onclick = () => ghDownloadShift();
+  }
+  btn.style.display = '';
+}
+
+async function ghPushShift(silent = false) {
+  const token = ghGetToken();
+  if (!token) { if (!silent) ghDownloadShift(); return; }
+  const btn = document.getElementById('ghShareBtn');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '⏳ 共有中...'; btn.disabled = true; }
+  try {
+    const payload = { year: currentYear, month: currentMonth, data: loadData(currentYear, currentMonth), updatedAt: new Date().toISOString() };
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));
+    let sha = '';
+    try { const r = await fetch(GH_API, { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }); if (r.ok) { const d = await r.json(); sha = d.sha; } } catch(_) {}
+    const res = await fetch(GH_API, { method: 'PUT', headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' }, body: JSON.stringify({ message: `シフト更新 ${currentYear}年${currentMonth}月`, content, ...(sha ? {sha} : {}) }) });
+    if (!res.ok) throw new Error((await res.json()).message || res.status);
+    if (btn) { btn.textContent = '✅ 共有済み'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
+    const d = new Date(); document.getElementById('ghSyncStatus').textContent = `☁️ ${d.getMonth()+1}/${d.getDate()} ${zeroPad(d.getHours())}:${zeroPad(d.getMinutes())} 自動同期`;
+  } catch(e) {
+    if (btn) { btn.textContent = '❌ エラー'; btn.disabled = false; }
+    if (!silent) alert('共有に失敗しました：' + e.message + '\n\nトークンの権限（Contents: Read and write）を確認してください。');
+    console.error('ghPushShift error:', e);
+  }
 }
 
 function ghDownloadShift() {
@@ -1438,6 +1493,12 @@ function shiftInit() {
   ghUpdateShareBtn();
   render();
   ghPullShift(false); // 最新シフトを自動取得
+  // 3分ごとに自動取得
+  setInterval(() => ghPullShift(false), 3 * 60 * 1000);
+  // タブ復帰時に自動取得
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) ghPullShift(false);
+  });
 }
 
 function resetMonthData() {
@@ -1607,12 +1668,14 @@ function saveCell() {
   const {name,day}=editKey,y=currentYear,m=currentMonth,data=loadData(y,m);
   data[`${name}_${day}`]={hours:document.getElementById('inputHours').value, facility:document.getElementById('inputFacility').value, patients:document.getElementById('inputPatients').value};
   saveData(y,m,data); closeModal(); render();
+  if (ghGetToken()) ghPushShift(true); // トークンがあれば自動push
 }
 
 function clearCell() {
   if(!editKey) return;
   const {name,day}=editKey,y=currentYear,m=currentMonth,data=loadData(y,m);
   delete data[`${name}_${day}`]; saveData(y,m,data); closeModal(); render();
+  if (ghGetToken()) ghPushShift(true); // トークンがあれば自動push
 }
 
 function shiftExportCSV() {
