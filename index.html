@@ -786,7 +786,9 @@ async function ghPushShift(silent = false) {
     if (btn) { btn.textContent = '✅ 共有済み'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
     const d = new Date(); document.getElementById('ghSyncStatus').textContent = `☁️ ${d.getMonth()+1}/${d.getDate()} ${zeroPad(d.getHours())}:${zeroPad(d.getMinutes())} 自動同期`;
   } catch(e) {
-    if (btn) { btn.textContent = '❌ エラー'; btn.disabled = false; }
+    if (btn) { btn.textContent = '❌ エラー'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000); }
+    const statusEl = document.getElementById('ghSyncStatus');
+    if (statusEl) statusEl.textContent = '❌ 同期失敗: ' + e.message;
     if (!silent) alert('共有に失敗しました：' + e.message + '\n\nトークンの権限（Contents: Read and write）を確認してください。');
     console.error('ghPushShift error:', e);
   }
