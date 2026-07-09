@@ -38,7 +38,7 @@
     },
     "高梨_23": {
       "hours": "6",
-      "facility": "いすみ苑",
+      "facility": "長生き邑",
       "patients": ""
     },
     "高梨_30": {
@@ -81,7 +81,7 @@
     },
     "南雲_23": {
       "hours": "6",
-      "facility": "長生き邑",
+      "facility": "いすみ苑",
       "patients": ""
     },
     "南雲_27": {
@@ -199,12 +199,7 @@
       "hours": "6",
       "facility": "長生き邑",
       "patients": ""
-    },
-    "石井_30": {
-      "hours": "6",
-      "facility": "いすみ苑",
-      "patients": ""
     }
   },
-  "updatedAt": "2026-07-09T02:53:42.245Z"
+  "updatedAt": "2026-07-09T02:54:39.362Z"
 }
