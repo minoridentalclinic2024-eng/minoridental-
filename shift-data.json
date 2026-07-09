@@ -181,8 +181,8 @@
       "patients": ""
     },
     "南雲_21": {
-      "hours": "6",
-      "facility": "いすみ苑",
+      "hours": "",
+      "facility": "",
       "patients": ""
     },
     "末吉_26": {
@@ -201,5 +201,5 @@
       "patients": ""
     }
   },
-  "updatedAt": "2026-07-09T02:47:53.752Z"
+  "updatedAt": "2026-07-09T02:48:27.269Z"
 }
