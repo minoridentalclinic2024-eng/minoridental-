@@ -285,6 +285,20 @@ input[type="number"], input[type="time"], input[type="month"], select {
   #pay-tab .import-file-btn { font-size: 12px; padding: 8px 10px; min-height: 40px; }
   #pay-tab .pay-export-btn { font-size: 14px; }
 }
+
+/* ===== GAS SYNC STATUS & ADMIN MODE ===== */
+.shift-update-banner { background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; margin: 8px 16px 0; padding: 10px 14px; display: none; align-items: center; gap: 10px; font-size: 13px; color: #92400e; flex-wrap: wrap; }
+.shift-update-banner button { background: #d97706; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; min-height: 34px; -webkit-tap-highlight-color: transparent; }
+#syncStatusEl { font-size: 11px; color: rgba(255,255,255,0.75); margin-left: 4px; transition: color 0.3s; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syncStatusEl[data-state="success"] { color: #86efac; }
+#syncStatusEl[data-state="failure"] { color: #fca5a5; }
+#syncStatusEl[data-state="pending"] { color: #fde68a; }
+#syncStatusEl[data-state="retry"] { color: #fed7aa; }
+#syncStatusEl[data-state="offline"] { color: #cbd5e1; }
+#syncRetryBtn { display: none; background: rgba(255,100,100,0.3); border: 1px solid rgba(255,100,100,0.6); color: #fff; border-radius: 6px; padding: 5px 10px; font-size: 11px; cursor: pointer; margin-left: 4px; }
+.shift-cell.readonly { cursor: default; }
+#shiftToast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 9999; white-space: nowrap; max-width: 90vw; text-align: center; }
+#shiftToast.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -436,9 +450,17 @@ input[type="number"], input[type="time"], input[type="month"], select {
     <button class="export-btn" onclick="autoAssign()" style="background:rgba(50,220,100,0.25);border-color:rgba(50,220,100,0.6);">🤖 自動割り当て</button>
     <span id="autoAssignMsg" style="font-size:12px;margin-left:8px;"></span>
     <button class="export-btn" onclick="openSlackDraftModal()" style="background:rgba(150,100,255,0.25);border-color:rgba(150,100,255,0.6);">📨 Slack確認依頼</button>
-    <button class="export-btn" id="ghShareBtn" onclick="ghDownloadShift()" style="background:rgba(30,180,100,0.25);border-color:rgba(30,180,100,0.6);">☁️ シフトを共有</button>
-    <button class="export-btn" onclick="ghPullShift(true)" style="background:rgba(30,130,255,0.2);border-color:rgba(30,130,255,0.5);">🔄 最新を取得</button>
-    <span id="ghSyncStatus" style="font-size:11px;color:rgba(255,255,255,0.75);margin-left:4px;"></span>
+    <button class="export-btn" id="shiftAdminBtn" onclick="toggleShiftAdmin()" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.4);">🔑 管理者</button>
+    <button class="export-btn" id="gasShareBtn" onclick="gasPushShift(false)" style="background:rgba(30,180,100,0.25);border-color:rgba(30,180,100,0.6);">☁️ 今すぐ同期</button>
+    <button class="export-btn" onclick="gasPullShift(true)" style="background:rgba(30,130,255,0.2);border-color:rgba(30,130,255,0.5);">🔄 最新を取得</button>
+    <span id="syncStatusEl" data-state=""></span>
+    <button id="syncRetryBtn" onclick="gasPushShift(false)">🔁 再試行</button>
+  </div>
+
+  <!-- ===== 新しいシフト更新通知バナー ===== -->
+  <div class="shift-update-banner" id="shiftUpdateBanner">
+    <span>📢 新しいシフトが公開されています。</span>
+    <button onclick="gasApplyLatest()">最新のシフトを表示</button>
   </div>
 
   <div class="settings-bar">
@@ -665,30 +687,39 @@ input[type="number"], input[type="time"], input[type="month"], select {
   <div class="pay-card" style="border: 2px solid #fee2e2;">
     <div class="pay-title" style="color:#b91c1c;">⚙️ 管理者メニュー</div>
 
-    <!-- 自動同期トークン設定 -->
+    <!-- ===== GAS同期設定 ここから ===== -->
     <div style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #e2e8f0;">
-      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:8px;">☁️ シフト自動同期（GitHubトークン）</div>
+      <div style="font-size:13px;font-weight:700;color:#1e4d7b;margin-bottom:8px;">☁️ シフト自動同期（Google Apps Script）</div>
       <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:10px;">
-        トークンを登録すると、シフトを保存した瞬間に全員の端末へ自動反映されます。<br>
-        トークンは <a href="https://github.com/settings/tokens/new?scopes=repo&description=%E8%A1%9B%E7%94%9F%E5%A3%AB%E7%AE%A1%E7%90%86" target="_blank" style="color:#3b82f6;">GitHub → Settings → Personal access tokens</a> で発行（Contentsを Read &amp; write に）
+        GASのデプロイURLとAPIキーを設定すると、シフト保存時に全端末へ自動反映されます。<br>
+        初回設定方法はシステム管理者に確認してください。
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input id="ghTokenInput" type="password" placeholder="github_pat_..." style="flex:1;min-width:200px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-family:monospace;" />
-        <button onclick="ghSaveToken()" style="padding:9px 16px;background:#1e4d7b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">保存</button>
-        <button onclick="localStorage.removeItem('gh_token');document.getElementById('ghTokenStatus').textContent='🗑 削除しました';ghUpdateShareBtn();" style="padding:9px 14px;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap;">削除</button>
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:4px;">GAS デプロイ URL</div>
+        <input id="gasUrlInput" type="url" placeholder="https://script.google.com/macros/s/..." style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-family:monospace;" />
       </div>
-      <div id="ghTokenStatus" style="font-size:12px;color:#059669;margin-top:6px;"></div>
-      <script>
-        (function() {
-          const inp = document.getElementById('ghTokenInput');
-          const sta = document.getElementById('ghTokenStatus');
-          if (inp && localStorage.getItem('gh_token')) {
-            inp.placeholder = '（登録済み）';
-            sta.textContent = '✅ トークン登録済み。シフト保存時に自動でGitHubへ共有されます。';
-          }
-        })();
-      </script>
+      <div style="margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:4px;">APIキー（スクリプトプロパティで設定した GAS_API_KEY の値）</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input id="gasApiKeyInput" type="password" placeholder="設定したAPIキーを入力..." style="flex:1;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-family:monospace;" />
+          <button onclick="toggleApiKeyVisibility()" id="gasApiKeyToggle" title="表示/非表示"
+            style="padding:8px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;cursor:pointer;font-size:14px;white-space:nowrap;">👁</button>
+        </div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:3px;">APIキーは保存後も画面上に表示されません</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="gasSaveConfig()" style="padding:9px 16px;background:#1e4d7b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">保存</button>
+        <button onclick="gasTestConnection()" style="padding:9px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">接続テスト</button>
+        <button onclick="gasShowBackups()" style="padding:9px 14px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:8px;font-size:12px;cursor:pointer;">🗂 バックアップ一覧</button>
+      </div>
+      <div id="gasConfigStatus" style="font-size:12px;color:#059669;margin-top:8px;min-height:18px;"></div>
+      <!-- バックアップ一覧エリア -->
+      <div id="gasBackupArea" style="display:none;margin-top:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;">📋 バックアップ履歴（最大10件）</div>
+        <div id="gasBackupList" style="font-size:12px;color:#64748b;"></div>
+      </div>
     </div>
+    <!-- ===== GAS同期設定 ここまで ===== -->
 
     <div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下の操作は元に戻せません。慎重に行ってください。</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -739,144 +770,577 @@ function switchTab(tab) {
 }
 
 // ========================================
-// GITHUB SHIFT SYNC
+// ===== GAS シフトクラウド同期 ここから =====
 // ========================================
-const GH_REPO      = 'minoridentalclinic2024-eng/minoridental-';
-const GH_FILE      = 'shift-data.json';
-const GH_RAW       = `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}`;
-const GH_API       = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
-const GH_TOKEN_KEY = 'gh_token';
 
-function ghGetToken() { return localStorage.getItem(GH_TOKEN_KEY) || ''; }
+// タイムカードGitHub取得用のリポジトリ定数（給与計算タブで使用）
+const GH_REPO = 'minoridentalclinic2024-eng/minoridental-';
 
-function ghSaveToken() {
-  const t = document.getElementById('ghTokenInput').value.trim();
-  if (!t) { alert('トークンを入力してください'); return; }
-  localStorage.setItem(GH_TOKEN_KEY, t);
-  document.getElementById('ghTokenStatus').textContent = '✅ 保存しました。シフト保存時に自動でGitHubに共有されます。';
-  ghUpdateShareBtn();
+// GAS設定キー（localStorageに保存）
+const GAS_URL_KEY     = 'gas_shift_url';
+const GAS_API_KEY_KEY = 'gas_shift_api_key';
+
+// 同期状態オブジェクト
+const syncState = {
+  version: 0,         // 現在端末が持つデータのバージョン
+  lastSavedVersion: 0,// 最後にクラウドへ保存したバージョン
+  updatedAt: null,
+  updatedBy: null,
+  pendingPayload: null, // バナー表示中の最新クラウドデータ
+  retryCount: 0,
+  retryTimer: null
+};
+
+// ===== タイマー・イベントリスナーの二重登録防止用 =====
+const AppState = {
+  shiftPollingTimer:   null,
+  visibilityHandler:   null,
+  focusHandler:        null,
+};
+
+// ===== 未同期データ管理 =====
+const PENDING_SYNC_KEY = 'shift_pending_sync';
+
+function savePendingSync(year, month) {
+  try {
+    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify({
+      pendingSync: true,
+      year:         year,
+      month:        month,
+      localVersion: syncState.lastSavedVersion,
+      savedAt:      new Date().toISOString()
+    }));
+  } catch(e) { console.error('[pendingSync] 保存失敗', e); }
 }
 
-function ghUpdateShareBtn() {
-  const btn = document.getElementById('ghShareBtn');
-  if (!btn) return;
-  if (ghGetToken()) {
-    btn.textContent = '☁️ 今すぐ共有';
-    btn.onclick = () => ghPushShift();
+function clearPendingSync() {
+  localStorage.removeItem(PENDING_SYNC_KEY);
+}
+
+function loadPendingSync() {
+  try { return JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'null'); } catch { return null; }
+}
+
+function checkAndNotifyPendingSync() {
+  const pending = loadPendingSync();
+  if (!pending || !pending.pendingSync) return;
+  // 同じ年月かつ未解決の未同期データがある場合のみ通知
+  if (pending.year === currentYear && pending.month === currentMonth) {
+    setSyncStatus('failure', `未同期データあり（${pending.year}/${zeroPad(pending.month)} localV${pending.localVersion}）`);
+    shiftShowToast('⚠️ 前回同期に失敗したデータがあります。「☁️ 今すぐ同期」を押してください。');
+  }
+}
+
+// ---- 競合時UI（ケースC） ----
+function showPendingSyncConflictUI(cloudPayload) {
+  const msg = '未同期の変更がありますが、共有シフトは別の端末で更新されています。\n\n' +
+    '【選択してください】\n' +
+    '① クラウドの最新シフトを表示（端末内の未同期変更は失われます）\n' +
+    '② 端末内の未同期データをJSONファイルに保存してからクラウドを読み込む\n' +
+    '③ 何もしない（端末内データをそのまま保持）\n\n' +
+    '[OK] = JSONバックアップを保存してからクラウドを読み込む\n[キャンセル] = 何もしない';
+  if (confirm(msg)) {
+    // ②: まずJSONバックアップ → その後クラウドを読み込む
+    exportPendingSyncAsJson();
+    setTimeout(() => {
+      if (confirm('バックアップを保存しました。クラウドの最新シフトを読み込みますか？')) {
+        gasPullShift(true, true);
+      }
+    }, 500);
+  }
+  // ③ キャンセル: 何もしない（端末内データ保持）
+}
+
+// ---- 未同期データをJSONファイルとして書き出す ----
+function exportPendingSyncAsJson() {
+  const pending = loadPendingSync();
+  const yr = pending ? pending.year  : currentYear;
+  const mo = pending ? pending.month : currentMonth;
+  const localData = loadData(yr, mo);
+  const blob = new Blob([JSON.stringify({
+    type:         'pendingSync_backup',
+    exportedAt:   new Date().toISOString(),
+    year:         yr,
+    month:        mo,
+    localVersion: pending ? pending.localVersion : 0,
+    savedAt:      pending ? pending.savedAt : null,
+    shifts:       localData
+  }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `shift_pending_${yr}_${String(mo).padStart(2,'0')}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// 管理者フラグ
+let isShiftAdmin = false;
+
+// ---- 設定取得 ----
+function gasGetUrl()    { return localStorage.getItem(GAS_URL_KEY) || ''; }
+function gasGetApiKey() { return localStorage.getItem(GAS_API_KEY_KEY) || ''; }
+
+function gasSaveConfig() {
+  if (!isShiftAdmin) { shiftShowToast('🔒 GAS設定変更は管理者のみ操作できます'); return; }
+  const url = (document.getElementById('gasUrlInput').value || '').trim();
+  const key = (document.getElementById('gasApiKeyInput').value || '').trim();
+  const st  = document.getElementById('gasConfigStatus');
+  if (!url) { if (st) st.textContent = '❌ GAS URLを入力してください'; return; }
+  localStorage.setItem(GAS_URL_KEY, url);
+  if (key) localStorage.setItem(GAS_API_KEY_KEY, key);
+  if (st) st.textContent = '✅ 設定を保存しました';
+  shiftShowToast('✅ GAS設定を保存しました');
+}
+
+// ---- APIキー 表示/非表示トグル ----
+function toggleApiKeyVisibility() {
+  const inp = document.getElementById('gasApiKeyInput');
+  const btn = document.getElementById('gasApiKeyToggle');
+  if (!inp) return;
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    if (btn) btn.textContent = '🙈';
   } else {
-    btn.textContent = '☁️ シフトを共有';
-    btn.onclick = () => ghDownloadShift();
+    inp.type = 'password';
+    if (btn) btn.textContent = '👁';
   }
-  btn.style.display = '';
 }
 
-async function ghPushShift(silent = false) {
-  const token = ghGetToken();
-  if (!token) { if (!silent) ghDownloadShift(); return; }
-  const btn = document.getElementById('ghShareBtn');
-  const orig = btn ? btn.textContent : '';
-  if (btn) { btn.textContent = '⏳ 共有中...'; btn.disabled = true; }
+// ---- 接続テスト（詳細エラーメッセージ対応）----
+async function gasTestConnection() {
+  if (!isShiftAdmin) { shiftShowToast('🔒 接続テストは管理者モードで実行してください'); return; }
+  const url = gasGetUrl();
+  const st  = document.getElementById('gasConfigStatus');
+
+  // 1. URL空チェック
+  if (!url) {
+    if (st) st.textContent = '❌ GAS URLが設定されていません。URLを入力して「保存」してください。';
+    return;
+  }
+  // 2. URL形式チェック
+  if (!url.startsWith('https://script.google.com/macros/s/')) {
+    if (st) st.textContent = '❌ GAS URLの形式が正しくありません。デプロイURLを確認してください。';
+    return;
+  }
+
+  if (st) st.textContent = '⏳ 接続テスト中...';
   try {
-    const payload = { year: currentYear, month: currentMonth, data: loadData(currentYear, currentMonth), updatedAt: new Date().toISOString() };
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));
-    let sha = '';
-    try { const r = await fetch(GH_API, { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }); if (r.ok) { const d = await r.json(); sha = d.sha; } } catch(_) {}
-    const res = await fetch(GH_API, { method: 'PUT', headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' }, body: JSON.stringify({ message: `シフト更新 ${currentYear}年${currentMonth}月`, content, ...(sha ? {sha} : {}) }) });
-    if (!res.ok) throw new Error((await res.json()).message || res.status);
-    if (btn) { btn.textContent = '✅ 共有済み'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000); }
-    const d = new Date(); document.getElementById('ghSyncStatus').textContent = `☁️ ${d.getMonth()+1}/${d.getDate()} ${zeroPad(d.getHours())}:${zeroPad(d.getMinutes())} 自動同期`;
+    const res = await fetchWithTimeout(
+      `${url}?action=getVersion&year=${currentYear}&month=${currentMonth}&t=${Date.now()}`,
+      { cache: 'no-store' }, 10000
+    );
+    // 3. HTTPステータスチェック
+    if (!res.ok) {
+      if (st) st.textContent = `❌ HTTPエラー ${res.status}。デプロイ権限またはURLを確認してください。`;
+      return;
+    }
+    // 4. JSONパースチェック
+    let json;
+    try { json = await res.json(); }
+    catch(_) {
+      if (st) st.textContent = '❌ GASから有効なJSONが返りませんでした。デプロイ設定を確認してください。';
+      return;
+    }
+    // 5. レスポンス内容チェック
+    if (typeof json.success === 'undefined') {
+      if (st) st.textContent = '❌ GASから有効な応答がありません。GASのコードを確認してください。';
+      return;
+    }
+    // 6. 成功
+    if (st) {
+      st.style.color = '#059669';
+      st.textContent = '✅ GASとの接続に成功しました。';
+    }
+    shiftShowToast('✅ GAS接続テスト成功');
+    console.log('[GAS] 接続テスト成功:', json);
   } catch(e) {
-    if (btn) { btn.textContent = '❌ エラー'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000); }
-    const statusEl = document.getElementById('ghSyncStatus');
-    if (statusEl) statusEl.textContent = '❌ 同期失敗: ' + e.message;
-    if (!silent) alert('共有に失敗しました：' + e.message + '\n\nトークンの権限（Contents: Read and write）を確認してください。');
-    console.error('ghPushShift error:', e);
+    console.error('[GAS] 接続テスト失敗', e);
+    if (e.name === 'AbortError') {
+      if (st) st.textContent = '❌ 通信がタイムアウトしました。URLを確認するかしばらくして再試行してください。';
+    } else {
+      if (st) st.textContent = '❌ 接続エラー: ' + e.message + '（ネットワークまたはデプロイ設定を確認）';
+    }
+    if (st) st.style.color = '#dc2626';
+    shiftShowToast('❌ GAS接続テスト失敗');
   }
 }
 
-function ghDownloadShift() {
-  const btn = document.getElementById('ghShareBtn');
-  const orig = btn.textContent;
-  btn.textContent = '⏳ 準備中...'; btn.disabled = true;
-
+// ---- タイムアウト付きfetch ----
+async function fetchWithTimeout(url, options = {}, timeout = 15000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
   try {
-    const payload = {
-      year: currentYear, month: currentMonth,
-      data: loadData(currentYear, currentMonth),
-      updatedAt: new Date().toISOString()
-    };
-    const json = JSON.stringify(payload, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = 'shift-data.json'; a.click();
-    URL.revokeObjectURL(url);
-
-    btn.textContent = '✅ ダウンロード完了';
-    document.getElementById('ghSyncStatus').textContent = '⬆️ GitHubにアップロードしてください';
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
-
-    // アップロード手順モーダルを表示
-    ghShowUploadGuide();
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return res;
   } catch(e) {
-    btn.textContent = orig; btn.disabled = false;
-    alert('エラー: ' + e.message);
+    clearTimeout(id);
+    throw e;
   }
 }
 
-function ghShowUploadGuide() {
-  let modal = document.getElementById('ghUploadGuideModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'ghUploadGuideModal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;';
-    modal.innerHTML = `
-      <div style="background:#fff;border-radius:16px;padding:24px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <div style="font-size:20px;font-weight:700;color:#1e4d7b;margin-bottom:12px;">☁️ GitHubにアップロード</div>
-        <div style="font-size:14px;color:#374151;line-height:1.7;">
-          ダウンロードされた <strong>shift-data.json</strong> を以下の手順でアップロードしてください：<br><br>
-          <strong style="color:#1e4d7b;">① </strong><a href="https://github.com/minoridentalclinic2024-eng/minoridental-" target="_blank" style="color:#3b82f6;">GitHubリポジトリを開く</a><br>
-          <strong style="color:#1e4d7b;">② </strong>「Add file」→「Upload files」をクリック<br>
-          <strong style="color:#1e4d7b;">③ </strong><strong>shift-data.json</strong> をドラッグ＆ドロップ<br>
-          <strong style="color:#1e4d7b;">④ </strong>「Commit changes」をクリック<br><br>
-          <span style="font-size:12px;color:#6b7280;">アップロード後、衛生士さんのスマホで「🔄 最新を取得」を押すと反映されます。</span>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
-          <a href="https://github.com/minoridentalclinic2024-eng/minoridental-/upload/main" target="_blank"
-             style="flex:1;background:#1e4d7b;color:#fff;padding:10px 16px;border-radius:8px;text-align:center;font-weight:600;font-size:14px;text-decoration:none;min-width:120px;">
-            📤 GitHubを開く
-          </a>
-          <button onclick="document.getElementById('ghUploadGuideModal').remove()"
-            style="flex:1;background:#f3f4f6;color:#374151;border:none;padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;min-width:80px;">
-            閉じる
-          </button>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  } else {
-    modal.style.display = 'flex';
-  }
+// ---- 同期ステータス表示 ----
+function setSyncStatus(state, msg) {
+  const el = document.getElementById('syncStatusEl');
+  if (!el) return;
+  const icons = { pending: '⏳', success: '☁️', failure: '❌', offline: '📴', retry: '🔄' };
+  el.textContent = (icons[state] || '') + ' ' + msg;
+  el.dataset.state = state;
+  // 再試行ボタンは失敗時かつリトライ上限時に表示
+  const retryBtn = document.getElementById('syncRetryBtn');
+  if (retryBtn) retryBtn.style.display = (state === 'failure' && syncState.retryCount >= 3) ? '' : 'none';
 }
 
-async function ghPullShift(showMsg = false) {
-  const statusEl = document.getElementById('ghSyncStatus');
-  if (statusEl) statusEl.textContent = '🔄 取得中...';
+function formatSyncTime(isoStr) {
+  if (!isoStr) return '';
   try {
-    const res = await fetch(GH_RAW + '?t=' + Date.now());
-    if (!res.ok) { if (statusEl) statusEl.textContent = '（共有データなし）'; return; }
-    const payload = await res.json();
-    // データをローカルに保存して再描画
-    localStorage.setItem(storeKey(payload.year, payload.month), JSON.stringify(payload.data));
+    const d = new Date(isoStr);
+    return `${d.getMonth()+1}/${d.getDate()} ${zeroPad(d.getHours())}:${zeroPad(d.getMinutes())}`;
+  } catch { return ''; }
+}
+
+// ---- シフトデータ適用 ----
+function applyShiftPayload(payload) {
+  syncState.version = payload.version || 0;
+  syncState.lastSavedVersion = payload.version || 0;
+  syncState.updatedAt  = payload.updatedAt;
+  syncState.updatedBy  = payload.updatedBy;
+  syncState.pendingPayload = null;
+  if (payload.shifts) {
+    saveData(payload.year, payload.month, payload.shifts);
     if (payload.year === currentYear && payload.month === currentMonth) render();
-    const d = new Date(payload.updatedAt);
-    const label = `☁️ ${d.getMonth()+1}/${d.getDate()} ${zeroPad(d.getHours())}:${zeroPad(d.getMinutes())} 更新`;
-    if (statusEl) statusEl.textContent = label;
-    if (showMsg) { const m=document.getElementById('autoAssignMsg'); if(m){m.textContent='✅ 最新データを読み込みました';setTimeout(()=>{m.textContent='';},2500);} }
-  } catch(e) {
-    if (statusEl) statusEl.textContent = '（取得失敗）';
+  }
+  hideShiftUpdateBanner();
+  const label = formatSyncTime(payload.updatedAt);
+  const by    = payload.updatedBy ? ' ' + payload.updatedBy + '更新' : '';
+  setSyncStatus('success', label + by);
+}
+
+// ---- 更新バナー ----
+function showShiftUpdateBanner() {
+  const b = document.getElementById('shiftUpdateBanner');
+  if (b) b.style.display = 'flex';
+}
+function hideShiftUpdateBanner() {
+  const b = document.getElementById('shiftUpdateBanner');
+  if (b) b.style.display = 'none';
+}
+function gasApplyLatest() {
+  if (syncState.pendingPayload) {
+    applyShiftPayload(syncState.pendingPayload);
+    shiftShowToast('✅ 最新データを反映しました');
+  } else {
+    gasPullShift(true, true);
   }
 }
+
+// ---- シフト取得 ----
+async function gasPullShift(showMsg = false, applyEvenIfEditing = false) {
+  const url = gasGetUrl();
+  if (!url) {
+    setSyncStatus('offline', 'GAS URL未設定');
+    return;
+  }
+  setSyncStatus('pending', '取得中...');
+  try {
+    const res = await fetchWithTimeout(
+      `${url}?action=getShift&year=${currentYear}&month=${currentMonth}&t=${Date.now()}`,
+      { cache: 'no-store' }, 15000
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (!json.success) {
+      setSyncStatus('failure', json.message || '取得失敗');
+      return;
+    }
+    if (!json.data) {
+      setSyncStatus('success', 'データなし（ローカルを表示中）');
+      if (showMsg) shiftShowToast('クラウドにデータがありません（ローカルを表示）');
+      return;
+    }
+    const payload = json.data;
+    const isEditing = document.getElementById('modal').classList.contains('open');
+    // 未同期データがある場合はクラウドデータで自動上書きしない
+    const hasPendingForMonth = (() => {
+      const p = loadPendingSync();
+      return p && p.pendingSync && p.year === payload.year && p.month === payload.month;
+    })();
+    if (!applyEvenIfEditing && (isEditing || hasPendingForMonth)) {
+      syncState.pendingPayload = payload;
+      showShiftUpdateBanner();
+      if (hasPendingForMonth) {
+        setSyncStatus('failure', '未同期データあり（クラウドを自動反映しませんでした）');
+      } else {
+        setSyncStatus('success', '新しいデータあり（編集中につき未反映）');
+      }
+    } else {
+      applyShiftPayload(payload);
+    }
+    if (showMsg) {
+      const m = document.getElementById('autoAssignMsg');
+      if (m) { m.textContent = '✅ 最新データを読み込みました'; setTimeout(() => { m.textContent = ''; }, 2500); }
+      shiftShowToast('✅ 最新データを読み込みました');
+    }
+  } catch(e) {
+    console.error('[GAS] gasPullShift エラー', e);
+    if (e.name === 'AbortError') {
+      setSyncStatus('offline', 'タイムアウト（ローカルを表示中）');
+    } else {
+      setSyncStatus('failure', '取得失敗: ' + e.message);
+    }
+    // ローカルデータはそのまま維持（消さない）
+  }
+}
+
+// ---- バージョン確認（軽量ポーリング）----
+async function checkShiftVersion() {
+  const url = gasGetUrl();
+  if (!url) return;
+  try {
+    const res = await fetchWithTimeout(
+      `${url}?action=getVersion&year=${currentYear}&month=${currentMonth}&t=${Date.now()}`,
+      { cache: 'no-store' }, 10000
+    );
+    if (!res.ok) return;
+    const json = await res.json();
+    if (!json.success || !json.data) return;
+    const cloudVer = json.data.version || 0;
+    if (cloudVer > syncState.version) {
+      const isEditing = document.getElementById('modal').classList.contains('open');
+      if (isEditing) {
+        showShiftUpdateBanner();
+      } else {
+        gasPullShift(false);
+      }
+    }
+  } catch(_) { /* サイレント */ }
+}
+
+// ---- シフト保存（クラウドへ）----
+async function gasPushShift(silent = false) {
+  if (!isShiftAdmin) {
+    if (!silent) shiftShowToast('🔒 シフト保存は管理者モードが必要です');
+    return;
+  }
+  const url = gasGetUrl();
+  if (!url) {
+    setSyncStatus('failure', 'GAS URL未設定（管理者メニューで設定してください）');
+    if (!silent) shiftShowToast('❌ GAS URLが未設定です');
+    return;
+  }
+  setSyncStatus('pending', '同期中...');
+  const btn = document.getElementById('gasShareBtn');
+  if (btn) { btn.textContent = '⏳ 同期中...'; btn.disabled = true; }
+
+  const shifts = loadData(currentYear, currentMonth);
+
+  // バリデーション
+  if (typeof shifts !== 'object' || Array.isArray(shifts)) {
+    setSyncStatus('failure', 'シフトデータが不正です');
+    if (btn) { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }
+    return;
+  }
+
+  const body = {
+    action:    'saveShift',
+    apiKey:    gasGetApiKey(),
+    year:      currentYear,
+    month:     currentMonth,
+    version:   syncState.lastSavedVersion,
+    updatedBy: '佐藤',
+    shifts:    shifts
+  };
+
+  try {
+    const res = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify(body)
+    }, 20000);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+
+    // バージョン競合
+    if (json.errorCode === 'VERSION_CONFLICT') {
+      setSyncStatus('failure', '競合: 別の端末で更新されています');
+      if (btn) { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }
+      if (!silent) {
+        showPendingSyncConflictUI(json.data || null);
+      } else {
+        if (json.data) syncState.pendingPayload = json.data;
+        showShiftUpdateBanner();
+      }
+      return;
+    }
+
+    if (!json.success) throw new Error(json.message || '保存失敗');
+
+    // 成功
+    syncState.version         = json.data.version;
+    syncState.lastSavedVersion = json.data.version;
+    syncState.updatedAt       = json.data.updatedAt;
+    syncState.retryCount      = 0;
+    if (syncState.retryTimer) { clearTimeout(syncState.retryTimer); syncState.retryTimer = null; }
+    clearPendingSync(); // 未同期フラグをクリア
+
+    setSyncStatus('success', formatSyncTime(json.data.updatedAt) + ' 同期完了');
+    if (btn) { btn.textContent = '✅ 同期済み'; setTimeout(() => { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }, 2000); }
+    if (!silent) shiftShowToast('☁️ クラウドへ同期しました');
+    console.log('[GAS] シフト同期成功 v' + json.data.version);
+
+  } catch(e) {
+    console.error('[GAS] gasPushShift エラー', e);
+    if (btn) { btn.textContent = '❌ 同期失敗'; setTimeout(() => { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }, 3000); }
+    if (e.name === 'AbortError') {
+      setSyncStatus('failure', 'タイムアウト（端末内には保存済み）');
+    } else {
+      setSyncStatus('failure', '端末内保存済み・クラウド同期失敗');
+    }
+    // ① 未同期状態をlocalStorageに記録（アプリ再起動後も検知できるよう）
+    savePendingSync(currentYear, currentMonth);
+    shiftShowToast('⚠️ 端末内には保存しましたが、クラウド同期に失敗しました');
+    scheduleRetry();
+  } finally {
+    // Android等でボタンが disabled のまま残らないよう保険的に解除
+    if (btn && btn.disabled) {
+      setTimeout(() => { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }, 3500);
+    }
+  }
+}
+
+// ---- 再試行（最大3回: 10s/20s/30s）----
+function scheduleRetry() {
+  if (syncState.retryCount >= 3) {
+    setSyncStatus('failure', '再試行上限に達しました。「再試行」ボタンを押してください。');
+    const retryBtn = document.getElementById('syncRetryBtn');
+    if (retryBtn) retryBtn.style.display = '';
+    return;
+  }
+  const delays = [10000, 20000, 30000];
+  const delay  = delays[syncState.retryCount];
+  syncState.retryCount++;
+  setSyncStatus('retry', `${delay/1000}秒後に再試行 (${syncState.retryCount}/3)`);
+  syncState.retryTimer = setTimeout(() => { gasPushShift(true); }, delay);
+}
+
+// ---- バックアップ一覧 ----
+async function gasShowBackups() {
+  if (!isShiftAdmin) { shiftShowToast('🔒 バックアップ一覧は管理者のみ確認できます'); return; }
+  const url  = gasGetUrl();
+  const area = document.getElementById('gasBackupArea');
+  const list = document.getElementById('gasBackupList');
+  if (!url) { alert('GAS URLが未設定です'); return; }
+  if (area) area.style.display = area.style.display === 'none' ? 'block' : 'none';
+  if (!list) return;
+  list.textContent = '⏳ 読み込み中...';
+  try {
+    // getBackups は POST 統一（APIキーをURLに含めないため）
+    const res  = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify({ action: 'getBackups', apiKey: gasGetApiKey(), year: currentYear, month: currentMonth })
+    }, 15000);
+    const json = await res.json();
+    if (!json.success || !json.data || json.data.length === 0) {
+      list.textContent = 'バックアップはありません';
+      return;
+    }
+    list.innerHTML = json.data.map(b => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;">
+        <span>v${b.version} — ${formatSyncTime(b.updatedAt)} (${b.updatedBy})</span>
+        <button onclick="gasRestoreBackup(${b.version})"
+          style="padding:4px 10px;background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer;">復元</button>
+      </div>`).join('');
+  } catch(e) {
+    list.textContent = '取得失敗: ' + e.message;
+  }
+}
+
+async function gasRestoreBackup(version) {
+  if (!isShiftAdmin) { shiftShowToast('🔒 バックアップ復元は管理者のみ操作できます'); return; }
+  const url = gasGetUrl();
+  if (!url) { alert('GAS URLが未設定です'); return; }
+  if (!confirm(`v${version}のデータに復元しますか？\n現在のシフトは上書きされます。`)) return;
+  try {
+    const res  = await fetchWithTimeout(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify({ action: 'restoreShift', apiKey: gasGetApiKey(), year: currentYear, month: currentMonth, version })
+    }, 20000);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || '復元失敗');
+    shiftShowToast('✅ v' + version + 'に復元しました');
+    gasPullShift(true, true);
+  } catch(e) {
+    alert('復元に失敗しました: ' + e.message);
+  }
+}
+
+// ---- 管理者モード ----
+function toggleShiftAdmin() {
+  if (isShiftAdmin) { lockShiftAdmin(); } else { unlockShiftAdmin(); }
+}
+
+function unlockShiftAdmin() {
+  const stored = pinGetStored();
+  if (!stored) {
+    isShiftAdmin = true;
+    updateShiftAdminBtn();
+    renderTable(currentYear, currentMonth); // readonly クラスを外す
+    shiftShowToast('🔓 管理者モードで編集できます');
+    return;
+  }
+  pinVerify(() => {
+    isShiftAdmin = true;
+    updateShiftAdminBtn();
+    renderTable(currentYear, currentMonth); // readonly クラスを外す
+    shiftShowToast('🔓 管理者モードで編集できます');
+    // GAS設定フォームに現在の値を反映
+    const urlInp = document.getElementById('gasUrlInput');
+    const keyInp = document.getElementById('gasApiKeyInput');
+    if (urlInp) urlInp.value = gasGetUrl();
+    if (keyInp) keyInp.placeholder = gasGetApiKey() ? '（登録済み）' : 'APIキーを入力...';
+  });
+}
+
+function lockShiftAdmin() {
+  isShiftAdmin = false;
+  updateShiftAdminBtn();
+  renderTable(currentYear, currentMonth); // readonly クラスを付与
+  shiftShowToast('🔒 閲覧モードに戻りました');
+}
+
+function updateShiftAdminBtn() {
+  const btn = document.getElementById('shiftAdminBtn');
+  if (!btn) return;
+  if (isShiftAdmin) {
+    btn.textContent = '🔓 管理者中';
+    btn.style.background    = 'rgba(220,50,50,0.3)';
+    btn.style.borderColor   = 'rgba(220,50,50,0.7)';
+  } else {
+    btn.textContent = '🔑 管理者';
+    btn.style.background    = 'rgba(255,255,255,0.15)';
+    btn.style.borderColor   = 'rgba(255,255,255,0.4)';
+  }
+}
+
+// ---- シフトタブ用トースト ----
+function shiftShowToast(msg) {
+  let t = document.getElementById('shiftToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'shiftToast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ========================================
+// ===== GAS シフトクラウド同期 ここまで =====
+// ========================================
 
 // ========================================
 // PIN LOCK
@@ -1148,9 +1612,12 @@ function tcPunchOut() {
   tcUpdateStatus(); tcShowToast('退勤時刻を記録しました');
 }
 
+// ===== 日またぎ対応済み =====
 function tcCalcGross(inT, outT) {
   const [ih,im] = inT.split(':').map(Number), [oh,om] = outT.split(':').map(Number);
-  return ((oh*60+om)-(ih*60+im))/60;
+  let gross = (oh*60+om) - (ih*60+im);
+  if (gross < 0) gross += 24 * 60; // 深夜をまたぐ場合（例: 22:00〜02:00）
+  return gross / 60;
 }
 function tcCalcNet(inT, outT, bMin) { return Math.max(0, tcCalcGross(inT, outT) - (bMin||0)/60); }
 
@@ -1345,31 +1812,45 @@ async function payFetchAllFromGitHub() {
   btn.disabled = true; btn.textContent = '⏳ 取込中...';
   statusEl.textContent = '';
   let successCount = 0;
-  for (const name of STAFF) {
-    const url = `https://raw.githubusercontent.com/${GH_REPO}/main/tc-${name}-${year}-${mm}.json?t=${Date.now()}`;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) { document.getElementById('payStatus_'+name).textContent = '（データなし）'; document.getElementById('payStatus_'+name).className = 'import-status'; continue; }
-      const payload = await res.json();
-      const records = []; let totalHours = 0; const facMap = {};
-      Object.entries(payload.records).sort(([a],[b])=>a.localeCompare(b)).forEach(([dateKey, rec]) => {
-        if (rec.in && rec.out) {
-          const hours = tcCalcNet(rec.in, rec.out, rec.break||0);
-          const d = new Date(dateKey + 'T00:00:00');
-          records.push({ date: dateKey, dow: DOW_JP[d.getDay()], fac: rec.fac||'', inT: rec.in, outT: rec.out, breakMin: rec.break||0, hours });
-          totalHours += hours;
-          if (rec.fac) facMap[rec.fac] = (facMap[rec.fac]||0) + hours;
+  try {
+    for (const name of STAFF) {
+      const url = `https://raw.githubusercontent.com/${GH_REPO}/main/tc-${name}-${year}-${mm}.json?t=${Date.now()}`;
+      const stEl = document.getElementById('payStatus_'+name);
+      try {
+        // タイムアウト付きfetch（15秒）
+        const res = await fetchWithTimeout(url, { cache: 'no-store' }, 15000);
+        if (!res.ok) {
+          if (stEl) { stEl.textContent = '（データなし）'; stEl.className = 'import-status'; }
+          continue;
         }
-      });
-      payImportedData[name] = { records, totalHours, facMap };
-      document.getElementById('payStatus_'+name).textContent = `✅ ${records.length}日分 / 計${totalHours.toFixed(1)}h`;
-      document.getElementById('payStatus_'+name).className = 'import-status loaded';
-      successCount++;
-    } catch(e) { document.getElementById('payStatus_'+name).textContent = '（取得失敗）'; document.getElementById('payStatus_'+name).className = 'import-status'; }
+        let payload;
+        try { payload = await res.json(); } catch { if (stEl) { stEl.textContent = '（JSONエラー）'; stEl.className = 'import-status'; } continue; }
+        const records = []; let totalHours = 0; const facMap = {};
+        Object.entries(payload.records || {}).sort(([a],[b])=>a.localeCompare(b)).forEach(([dateKey, rec]) => {
+          if (rec.in && rec.out) {
+            const hours = tcCalcNet(rec.in, rec.out, rec.break||0);
+            const d = new Date(dateKey + 'T00:00:00');
+            records.push({ date: dateKey, dow: DOW_JP[d.getDay()], fac: rec.fac||'', inT: rec.in, outT: rec.out, breakMin: rec.break||0, hours });
+            totalHours += hours;
+            if (rec.fac) facMap[rec.fac] = (facMap[rec.fac]||0) + hours;
+          }
+        });
+        payImportedData[name] = { records, totalHours, facMap };
+        if (stEl) { stEl.textContent = `✅ ${records.length}日分 / 計${totalHours.toFixed(1)}h`; stEl.className = 'import-status loaded'; }
+        successCount++;
+      } catch(e) {
+        console.error('[payFetch] ' + name + ' 取得失敗', e);
+        const msg = e.name === 'AbortError' ? '（タイムアウト）' : '（取得失敗）';
+        if (stEl) { stEl.textContent = msg; stEl.className = 'import-status'; }
+      }
+    }
+    payRenderTransportTable(); payRender();
+    statusEl.textContent = successCount > 0 ? `✅ ${successCount}人分を取込みました` : '（まだGitHubにデータがありません）';
+  } finally {
+    // Androidでローディング解除を保証
+    btn.textContent = '☁️ 全員分のタイムカードをGitHubから取込';
+    btn.disabled = false;
   }
-  payRenderTransportTable(); payRender();
-  btn.textContent = '☁️ 全員分のタイムカードをGitHubから取込'; btn.disabled = false;
-  statusEl.textContent = successCount > 0 ? `✅ ${successCount}人分を取込みました` : '（まだGitHubにデータがありません）';
 }
 
 function tcExportCSV() {
@@ -1469,13 +1950,14 @@ function getFacPatients() {
 }
 const FAC_PATIENTS = getFacPatients();
 
+// ===== 石井 追加済み =====
 const SHIFT_RULES = {
   facPriorityByDow: {
-    4: { '高梨':['一宮喜楽園','いすみ苑'], '吉岡':['いすみ苑','一宮喜楽園'], '南雲':['いすみ苑','一宮喜楽園'], '末吉':['いすみ苑','一宮喜楽園'], '古阪':['いすみ苑','一宮喜楽園'] },
-    1: { '高梨':['長生き邑','いすみ苑','一宮喜楽園'], '吉岡':['長生き邑','いすみ苑','一宮喜楽園'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['長生き邑','いすみ苑','一宮喜楽園'] },
-    2: { '高梨':['一宮喜楽園','いすみ苑','長生き邑'], '吉岡':['いすみ苑','一宮喜楽園','長生き邑'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['一宮喜楽園','いすみ苑','長生き邑'] },
+    4: { '高梨':['一宮喜楽園','いすみ苑'], '吉岡':['いすみ苑','一宮喜楽園'], '南雲':['いすみ苑','一宮喜楽園'], '末吉':['いすみ苑','一宮喜楽園'], '古阪':['いすみ苑','一宮喜楽園'], '石井':['いすみ苑','一宮喜楽園'] },
+    1: { '高梨':['長生き邑','いすみ苑','一宮喜楽園'], '吉岡':['長生き邑','いすみ苑','一宮喜楽園'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['長生き邑','いすみ苑','一宮喜楽園'], '石井':['長生き邑','いすみ苑','一宮喜楽園'] },
+    2: { '高梨':['一宮喜楽園','いすみ苑','長生き邑'], '吉岡':['いすみ苑','一宮喜楽園','長生き邑'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['一宮喜楽園','いすみ苑','長生き邑'], '石井':['いすみ苑','一宮喜楽園','長生き邑'] },
   },
-  facPriority: { '高梨':['一宮喜楽園','いすみ苑','長生き邑'], '吉岡':['いすみ苑','一宮喜楽園','長生き邑'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['長生き邑','いすみ苑','一宮喜楽園'] },
+  facPriority: { '高梨':['一宮喜楽園','いすみ苑','長生き邑'], '吉岡':['いすみ苑','一宮喜楽園','長生き邑'], '南雲':['長生き邑','いすみ苑','一宮喜楽園'], '末吉':['長生き邑','いすみ苑','一宮喜楽園'], '古阪':['長生き邑','いすみ苑','一宮喜楽園'], '石井':['いすみ苑','一宮喜楽園','長生き邑'] },
   dowQuota: { 4:{'いすみ苑':3,'一宮喜楽園':2,'長生き邑':0}, 1:{'長生き邑':3,'いすみ苑':1,'一宮喜楽園':1}, 2:{'いすみ苑':2,'一宮喜楽園':2,'長生き邑':1}, 3:{'いすみ苑':2,'一宮喜楽園':1,'長生き邑':1}, 5:{'いすみ苑':2,'一宮喜楽園':1,'長生き邑':1} },
   maxPerWeek: 1,
 };
@@ -1492,15 +1974,28 @@ function saveDefaultHours(h) { localStorage.setItem('default_hours', JSON.string
 function shiftInit() {
   const now = new Date();
   currentYear = now.getFullYear(); currentMonth = now.getMonth()+1;
-  ghUpdateShareBtn();
+  updateShiftAdminBtn();
   render();
-  ghPullShift(false); // 最新シフトを自動取得
-  // 3分ごとに自動取得
-  setInterval(() => ghPullShift(false), 3 * 60 * 1000);
-  // タブ復帰時に自動取得
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) ghPullShift(false);
-  });
+
+  // ===== GASクラウドから最新シフトを取得 =====
+  gasPullShift(false);
+
+  // 45秒ごとにバージョン確認（重複登録防止: AppState管理）
+  if (AppState.shiftPollingTimer) clearInterval(AppState.shiftPollingTimer);
+  AppState.shiftPollingTimer = setInterval(checkShiftVersion, 45 * 1000);
+
+  // タブ復帰時に自動取得（重複登録防止）
+  if (AppState.visibilityHandler) document.removeEventListener('visibilitychange', AppState.visibilityHandler);
+  AppState.visibilityHandler = () => { if (!document.hidden) gasPullShift(false); };
+  document.addEventListener('visibilitychange', AppState.visibilityHandler);
+
+  // フォーカス時に自動取得（重複登録防止）
+  if (AppState.focusHandler) window.removeEventListener('focus', AppState.focusHandler);
+  AppState.focusHandler = () => { gasPullShift(false); };
+  window.addEventListener('focus', AppState.focusHandler);
+
+  // 前回セッションで未同期のデータがあれば通知
+  checkAndNotifyPendingSync();
 }
 
 function resetMonthData() {
@@ -1514,8 +2009,19 @@ function calcLimit(hours) {
   return Math.floor(parseFloat(hours)/8*15);
 }
 
-function prevMonth() { currentMonth--; if(currentMonth<1){currentMonth=12;currentYear--;} render(); }
-function nextMonth() { currentMonth++; if(currentMonth>12){currentMonth=1;currentYear++;} render(); }
+function prevMonth() {
+  currentMonth--; if(currentMonth<1){currentMonth=12;currentYear--;}
+  // バージョン番号をリセット（別月のデータ）
+  syncState.version = 0; syncState.lastSavedVersion = 0;
+  render();
+  gasPullShift(false); // 月変更時にGASから最新取得
+}
+function nextMonth() {
+  currentMonth++; if(currentMonth>12){currentMonth=1;currentYear++;}
+  syncState.version = 0; syncState.lastSavedVersion = 0;
+  render();
+  gasPullShift(false); // 月変更時にGASから最新取得
+}
 
 function renderSettings() {
   const defaults = loadDefaultHours();
@@ -1593,7 +2099,8 @@ function renderTable(y,m) {
       {
         if(patients!=='') monthTotal += parseInt(patients)||0;
         const weClass = isWE ? ' weekend' : '';
-        tbody += `<td class="shift-cell${weClass} ${over?'over-limit':'has-data'}" onclick="openModal('${name}',${d})"><div class="cell-inner">`;
+        const roClass = isShiftAdmin ? '' : ' readonly';
+        tbody += `<td class="shift-cell${weClass}${roClass} ${over?'over-limit':'has-data'}" onclick="openModal('${name}',${d})"><div class="cell-inner">`;
         if(isOff) tbody += `<span class="cell-off">${isWE?'休':'休み'}</span>`;
         else {
           if(facility) tbody += `<div class="cell-facility">${facility}</div>`;
@@ -1636,6 +2143,11 @@ function renderFacSummary(y,m) {
 }
 
 function openModal(name,day) {
+  // 管理者モードでないと編集不可
+  if (!isShiftAdmin) {
+    shiftShowToast('🔒 シフト編集は管理者モードが必要です（右上「🔑 管理者」を押してください）');
+    return;
+  }
   const y=currentYear,m=currentMonth,data=loadData(y,m),defaults=loadDefaultHours();
   const key=`${name}_${day}`,cell=data[key]||{},dow=dayOfWeek(y,m,day);
   editKey={name,day};
@@ -1668,16 +2180,25 @@ function closeModal() {
 function saveCell() {
   if(!editKey) return;
   const {name,day}=editKey,y=currentYear,m=currentMonth,data=loadData(y,m);
-  data[`${name}_${day}`]={hours:document.getElementById('inputHours').value, facility:document.getElementById('inputFacility').value, patients:document.getElementById('inputPatients').value};
+  data[`${name}_${day}`]={
+    hours:    document.getElementById('inputHours').value,
+    facility: document.getElementById('inputFacility').value,
+    patients: document.getElementById('inputPatients').value
+  };
+  // ① まずlocalStorageへ保存（必ず成功）
   saveData(y,m,data); closeModal(); render();
-  if (ghGetToken()) ghPushShift(true); // トークンがあれば自動push
+  // ② GASへクラウド同期（失敗してもローカルは保持される）
+  gasPushShift(true);
 }
 
 function clearCell() {
   if(!editKey) return;
   const {name,day}=editKey,y=currentYear,m=currentMonth,data=loadData(y,m);
-  delete data[`${name}_${day}`]; saveData(y,m,data); closeModal(); render();
-  if (ghGetToken()) ghPushShift(true); // トークンがあれば自動push
+  delete data[`${name}_${day}`];
+  // ① まずlocalStorageへ保存
+  saveData(y,m,data); closeModal(); render();
+  // ② GASへクラウド同期
+  gasPushShift(true);
 }
 
 function shiftExportCSV() {
@@ -1944,12 +2465,14 @@ function payBonusLabel() {
 // ---- 交通費デフォルト値（座標から算出・往復・15円/km）----
 // 住所: いすみ苑=いすみ市能実615, 一宮喜楽園=一宮町船頭給201, 長生き邑=長生村金田2133
 // 直線距離×道路係数1.3×往復×15円/km で算出。Googleマップで要確認。
+// ===== 石井 追加済み（交通費は要確認・手動で修正してください）=====
 const TRANSPORT_DEFAULTS = {
   '南雲': { 'いすみ苑': 1660, '一宮喜楽園': 1370, '長生き邑': 980 },  // 千葉市安住ヶ丘東
   '末吉': { 'いすみ苑':  680, '一宮喜楽園':  430, '長生き邑': 380 },  // 茂原市下長吉
   '吉岡': { 'いすみ苑':  720, '一宮喜楽園':  470, '長生き邑': 420 },  // 茂原市小林
   '高梨': { 'いすみ苑':  250, '一宮喜楽園':   80, '長生き邑': 530 },  // 一宮町寅
   '古阪': { 'いすみ苑':  940, '一宮喜楽園':  630, '長生き邑': 260 },  // 大網白里市大網
+  '石井': { 'いすみ苑':    0, '一宮喜楽園':    0, '長生き邑':   0 },  // ← 実際の金額に変更してください
 };
 
 function payInitTransportDefaults() {
@@ -2238,6 +2761,12 @@ function payExportCSV() {
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
   tcInit();
+
+  // 管理者メニューのGAS設定フォームに保存済み値を反映（ページ読み込み時）
+  const gasUrlEl = document.getElementById('gasUrlInput');
+  const gasKeyEl = document.getElementById('gasApiKeyInput');
+  if (gasUrlEl && gasGetUrl()) gasUrlEl.value = gasGetUrl();
+  if (gasKeyEl && gasGetApiKey()) gasKeyEl.placeholder = '（登録済み）';
 });
 </script>
 
