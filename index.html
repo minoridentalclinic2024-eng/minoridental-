@@ -780,6 +780,9 @@ const GH_REPO = 'minoridentalclinic2024-eng/minoridental-';
 const GAS_URL_KEY     = 'gas_shift_url';
 const GAS_API_KEY_KEY = 'gas_shift_api_key';
 
+// 公開読み取り用デフォルトGAS URL（一般端末でlocalStorage未設定時に使用）
+const DEFAULT_GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyxx7u-N5KQo3L69TlVdYOYcUyu-Vydd3GEOYZyVDRV6_F7D3_tS1Efj1qU6V-p2Ml7/exec';
+
 // 同期状態オブジェクト
 const syncState = {
   version: 0,         // 現在端末が持つデータのバージョン
@@ -877,7 +880,7 @@ function exportPendingSyncAsJson() {
 let isShiftAdmin = false;
 
 // ---- 設定取得 ----
-function gasGetUrl()    { return localStorage.getItem(GAS_URL_KEY) || ''; }
+function gasGetUrl()    { return localStorage.getItem(GAS_URL_KEY) || DEFAULT_GAS_API_URL; }
 function gasGetApiKey() { return localStorage.getItem(GAS_API_KEY_KEY) || ''; }
 
 function gasSaveConfig() {
