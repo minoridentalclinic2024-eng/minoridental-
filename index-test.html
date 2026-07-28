@@ -780,6 +780,9 @@ const GH_REPO = 'minoridentalclinic2024-eng/minoridental-';
 const GAS_URL_KEY     = 'gas_shift_url';
 const GAS_API_KEY_KEY = 'gas_shift_api_key';
 
+// 公開読み取り用デフォルトGAS URL（一般端末でlocalStorage未設定時に使用）
+const DEFAULT_GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyxx7u-N5KQo3L69TlVdYOYcUyu-Vydd3GEOYZyVDRV6_F7D3_tS1Efj1qU6V-p2Ml7/exec';
+
 // 同期状態オブジェクト
 const syncState = {
   version: 0,         // 現在端末が持つデータのバージョン
@@ -877,7 +880,7 @@ function exportPendingSyncAsJson() {
 let isShiftAdmin = false;
 
 // ---- 設定取得 ----
-function gasGetUrl()    { return localStorage.getItem(GAS_URL_KEY) || ''; }
+function gasGetUrl()    { return localStorage.getItem(GAS_URL_KEY) || DEFAULT_GAS_API_URL; }
 function gasGetApiKey() { return localStorage.getItem(GAS_API_KEY_KEY) || ''; }
 
 function gasSaveConfig() {
@@ -1113,6 +1116,7 @@ async function checkShiftVersion() {
         gasPullShift(false);
       }
     }
+    tcGasPullRecords();
   } catch(_) { /* サイレント */ }
 }
 
@@ -1221,6 +1225,79 @@ function scheduleRetry() {
   syncState.retryCount++;
   setSyncStatus('retry', `${delay/1000}秒後に再試行 (${syncState.retryCount}/3)`);
   syncState.retryTimer = setTimeout(() => { gasPushShift(true); }, delay);
+}
+
+// ============================================================
+// ===== タイムカード GAS同期（追加） =====
+// ============================================================
+
+// タイムカード1件保存 → GASへ送信（fire-and-forget）
+function tcGasSaveRecord(key, rec) {
+  const url = gasGetUrl();
+  if (!url || !tcCurrentName) return;
+  const inT = rec.in || '', outT = rec.out || '', bMin = rec.break || 0;
+  let actual = 0;
+  if (inT && outT) {
+    const diff = tcCalcNet(inT, outT, bMin);
+    actual = Math.max(0, Math.round(diff * 60));
+  }
+  const body = JSON.stringify({
+    action: 'saveTimecard', staffId: tcCurrentName, staffName: tcCurrentName,
+    facility: rec.fac || '', workDate: key,
+    startTime: inT, endTime: outT, breakMinutes: bMin, actualMinutes: actual,
+    note: rec.note || '', updatedAt: new Date().toISOString()
+  });
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body })
+    .then(r => r.json())
+    .then(j => { if (j.success) console.log('[TC] GAS保存完了', key); else console.warn('[TC] GAS保存失敗', j.message); })
+    .catch(e => console.warn('[TC] GAS通信失敗', e.message));
+}
+
+// タイムカード1件削除 → GASへ送信（fire-and-forget）
+function tcGasDeleteRecord(key) {
+  const url = gasGetUrl();
+  if (!url || !tcCurrentName) return;
+  const body = JSON.stringify({
+    action: 'deleteTimecard', staffId: tcCurrentName,
+    workDate: key, updatedAt: new Date().toISOString()
+  });
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body })
+    .then(r => r.json())
+    .then(j => { if (j.success) console.log('[TC] GAS削除完了', key); else console.warn('[TC] GAS削除失敗', j.message); })
+    .catch(e => console.warn('[TC] GAS通信失敗', e.message));
+}
+
+// GASからタイムカード取得 → localStorageへマージ（updatedAt優先）
+async function tcGasPullRecords() {
+  if (!tcCurrentName) return;
+  const url = gasGetUrl();
+  if (!url) return;
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
+  try {
+    const gasUrl = url + '?action=getTimecards&staffId=' + encodeURIComponent(tcCurrentName) + '&year=' + y + '&month=' + m;
+    const r = await fetch(gasUrl, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return;
+    const json = await r.json();
+    if (!json.success || !Array.isArray(json.data)) return;
+    const recs = tcLoadRecs(tcCurrentName);
+    let changed = false;
+    json.data.forEach(function(item) {
+      const key = String(item.workDate || '');
+      if (!key) return;
+      if (item.deleted) {
+        if (recs[key]) { delete recs[key]; changed = true; }
+        return;
+      }
+      const localUpdatedAt = recs[key] ? (recs[key].updatedAt || '') : '';
+      const gasUpdatedAt   = String(item.updatedAt || '');
+      if (!recs[key] || gasUpdatedAt > localUpdatedAt) {
+        recs[key] = { fac: item.facility || '', in: item.startTime || '', out: item.endTime || '',
+          break: parseInt(item.breakMinutes) || 0, note: item.note || '', updatedAt: gasUpdatedAt };
+        changed = true;
+      }
+    });
+    if (changed) { tcSaveRecs(tcCurrentName, recs); tcRenderView(); tcLoadTodayRecord(); }
+  } catch(e) { console.warn('[TC] GAS取得失敗', e.message); }
 }
 
 // ---- バックアップ一覧 ----
@@ -1572,6 +1649,7 @@ function tcShowMain() {
   tcUpdateStatus();
   tcLoadTodayRecord();
   tcRenderView();
+  tcGasPullRecords();
 }
 
 function tcChangeName() {
@@ -1693,6 +1771,7 @@ function tcSaveRecord() {
   const recs = tcLoadRecs(tcCurrentName);
   recs[key] = { fac: tcSelectedFac, in: inT, out: outT||'', break: tcBreakMin };
   tcSaveRecs(tcCurrentName, recs);
+  tcGasSaveRecord(key, recs[key]);
   if (tcEditingKey) {
     tcEditingKey = null;
     document.getElementById('tcEditBanner').style.display = 'none';
@@ -1759,6 +1838,7 @@ function tcDeleteRecord(key) {
   if (!confirm(key+' の記録を削除しますか？')) return;
   const recs = tcLoadRecs(tcCurrentName);
   delete recs[key]; tcSaveRecs(tcCurrentName, recs);
+  tcGasDeleteRecord(key);
   tcRenderView(); tcShowToast('削除しました');
 }
 
@@ -1986,12 +2066,12 @@ function shiftInit() {
 
   // タブ復帰時に自動取得（重複登録防止）
   if (AppState.visibilityHandler) document.removeEventListener('visibilitychange', AppState.visibilityHandler);
-  AppState.visibilityHandler = () => { if (!document.hidden) gasPullShift(false); };
+  AppState.visibilityHandler = () => { if (!document.hidden) { gasPullShift(false); tcGasPullRecords(); } };
   document.addEventListener('visibilitychange', AppState.visibilityHandler);
 
   // フォーカス時に自動取得（重複登録防止）
   if (AppState.focusHandler) window.removeEventListener('focus', AppState.focusHandler);
-  AppState.focusHandler = () => { gasPullShift(false); };
+  AppState.focusHandler = () => { gasPullShift(false); tcGasPullRecords(); };
   window.addEventListener('focus', AppState.focusHandler);
 
   // 前回セッションで未同期のデータがあれば通知
