@@ -1003,16 +1003,21 @@ function formatSyncTime(isoStr) {
 }
 
 // ---- シフトデータ適用 ----
+// 修正(月切替バグ対策): 受信データの年月が「現在選択中の年月」と一致する場合のみ
+// syncState（バージョン等の同期状態）を更新する。月を切り替えた直後に旧月の
+// 応答が遅れて届いても、新しい月の同期状態を上書きしないようにするため。
 function applyShiftPayload(payload) {
+  const isCurrentMonth = (payload.year === currentYear && payload.month === currentMonth);
+  if (payload.shifts) {
+    saveData(payload.year, payload.month, payload.shifts); // ローカルキャッシュは常に保存してよい
+  }
+  if (!isCurrentMonth) return; // 表示中と異なる年月のデータは同期状態(syncState)に反映しない
   syncState.version = payload.version || 0;
   syncState.lastSavedVersion = payload.version || 0;
   syncState.updatedAt  = payload.updatedAt;
   syncState.updatedBy  = payload.updatedBy;
   syncState.pendingPayload = null;
-  if (payload.shifts) {
-    saveData(payload.year, payload.month, payload.shifts);
-    if (payload.year === currentYear && payload.month === currentMonth) render();
-  }
+  render();
   hideShiftUpdateBanner();
   const label = formatSyncTime(payload.updatedAt);
   const by    = payload.updatedBy ? ' ' + payload.updatedBy + '更新' : '';
@@ -1136,7 +1141,11 @@ async function gasPushShift(silent = false) {
   const btn = document.getElementById('gasShareBtn');
   if (btn) { btn.textContent = '⏳ 同期中...'; btn.disabled = true; }
 
-  const shifts = loadData(currentYear, currentMonth);
+  // 修正(月切替バグ対策): 送信対象の年月をここで固定する。
+  // 通信中に月が切り替わっても、この処理は必ず reqYear/reqMonth を対象に完結させる。
+  const reqYear  = currentYear;
+  const reqMonth = currentMonth;
+  const shifts = loadData(reqYear, reqMonth);
 
   // バリデーション
   if (typeof shifts !== 'object' || Array.isArray(shifts)) {
@@ -1148,8 +1157,8 @@ async function gasPushShift(silent = false) {
   const body = {
     action:    'saveShift',
     apiKey:    gasGetApiKey(),
-    year:      currentYear,
-    month:     currentMonth,
+    year:      reqYear,
+    month:     reqMonth,
     version:   syncState.lastSavedVersion,
     updatedBy: '佐藤',
     shifts:    shifts
@@ -1179,30 +1188,48 @@ async function gasPushShift(silent = false) {
 
     if (!json.success) throw new Error(json.message || '保存失敗');
 
-    // 成功
-    syncState.version         = json.data.version;
-    syncState.lastSavedVersion = json.data.version;
-    syncState.updatedAt       = json.data.updatedAt;
+    // 成功（reqYear/reqMonth 分の保存が成功）
+    // 修正(月切替バグ対策): 通信中に表示中の月が変わっていた場合は、
+    // 今表示している月とは無関係の同期状態(syncState/ボタン表示)を書き換えない。
+    const isStillCurrentMonth = (reqYear === currentYear && reqMonth === currentMonth);
+    if (isStillCurrentMonth) {
+      syncState.version         = json.data.version;
+      syncState.lastSavedVersion = json.data.version;
+      syncState.updatedAt       = json.data.updatedAt;
+    }
     syncState.retryCount      = 0;
     if (syncState.retryTimer) { clearTimeout(syncState.retryTimer); syncState.retryTimer = null; }
-    clearPendingSync(); // 未同期フラグをクリア
+    // reqYear/reqMonth 分の未同期フラグのみクリア（他月の未同期フラグは残す）
+    const pendingAfterPush = loadPendingSync();
+    if (pendingAfterPush && pendingAfterPush.pendingSync && pendingAfterPush.year === reqYear && pendingAfterPush.month === reqMonth) {
+      clearPendingSync();
+    }
 
-    setSyncStatus('success', formatSyncTime(json.data.updatedAt) + ' 同期完了');
-    if (btn) { btn.textContent = '✅ 同期済み'; setTimeout(() => { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }, 2000); }
-    if (!silent) shiftShowToast('☁️ クラウドへ同期しました');
-    console.log('[GAS] シフト同期成功 v' + json.data.version);
+    if (isStillCurrentMonth) {
+      setSyncStatus('success', formatSyncTime(json.data.updatedAt) + ' 同期完了');
+      if (btn) { btn.textContent = '✅ 同期済み'; setTimeout(() => { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }, 2000); }
+    } else if (btn) {
+      btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false;
+    }
+    if (!silent) shiftShowToast(`☁️ ${reqYear}年${reqMonth}月をクラウドへ同期しました`);
+    console.log('[GAS] シフト同期成功 ' + reqYear + '/' + reqMonth + ' v' + json.data.version);
 
   } catch(e) {
     console.error('[GAS] gasPushShift エラー', e);
-    if (btn) { btn.textContent = '❌ 同期失敗'; setTimeout(() => { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }, 3000); }
-    if (e.name === 'AbortError') {
-      setSyncStatus('failure', 'タイムアウト（端末内には保存済み）');
-    } else {
-      setSyncStatus('failure', '端末内保存済み・クラウド同期失敗');
+    const isStillCurrentMonth = (reqYear === currentYear && reqMonth === currentMonth);
+    if (isStillCurrentMonth) {
+      if (btn) { btn.textContent = '❌ 同期失敗'; setTimeout(() => { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }, 3000); }
+      if (e.name === 'AbortError') {
+        setSyncStatus('failure', 'タイムアウト（端末内には保存済み）');
+      } else {
+        setSyncStatus('failure', '端末内保存済み・クラウド同期失敗');
+      }
+    } else if (btn) {
+      btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false;
     }
-    // ① 未同期状態をlocalStorageに記録（アプリ再起動後も検知できるよう）
-    savePendingSync(currentYear, currentMonth);
-    shiftShowToast('⚠️ 端末内には保存しましたが、クラウド同期に失敗しました');
+    // ① 未同期状態をlocalStorageに記録（アプリ再起動後も検知できるよう、実際に送信した reqYear/reqMonth で記録）
+    savePendingSync(reqYear, reqMonth);
+    shiftShowToast(`⚠️ ${reqYear}年${reqMonth}月は端末内には保存しましたが、クラウド同期に失敗しました`);
     scheduleRetry();
   } finally {
     // Android等でボタンが disabled のまま残らないよう保険的に解除
@@ -1272,7 +1299,10 @@ async function tcGasPullRecords() {
   if (!tcCurrentName) return;
   const url = gasGetUrl();
   if (!url) return;
-  const now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
+  // 修正(月切替バグ対策): 「今日」の月ではなく、タイムカードで現在表示中の年月(tcViewYear/tcViewMonth)を使う。
+  // これにより月を切り替えて過去/翌月を表示している間も、45秒同期・focus・visibilitychangeが
+  // 正しく「表示中の年月」のデータを取得するようになる。
+  const y = tcViewYear, m = tcViewMonth;
   try {
     const gasUrl = url + '?action=getTimecards&staffId=' + encodeURIComponent(tcCurrentName) + '&year=' + y + '&month=' + m;
     const r = await fetch(gasUrl, { signal: AbortSignal.timeout(8000) });
@@ -1787,6 +1817,7 @@ function tcChangeViewMonth(delta) {
   if (tcViewMonth > 12) { tcViewMonth = 1; tcViewYear++; }
   if (tcViewMonth < 1) { tcViewMonth = 12; tcViewYear--; }
   tcRenderView();
+  tcGasPullRecords(); // 修正: 月変更時も表示中の年月でGASから取得する
 }
 
 function tcRenderView() {
@@ -2089,18 +2120,48 @@ function calcLimit(hours) {
   return Math.floor(parseFloat(hours)/8*15);
 }
 
-function prevMonth() {
-  currentMonth--; if(currentMonth<1){currentMonth=12;currentYear--;}
-  // バージョン番号をリセット（別月のデータ）
-  syncState.version = 0; syncState.lastSavedVersion = 0;
-  render();
-  gasPullShift(false); // 月変更時にGASから最新取得
+// 修正(月切替バグ対策): 月変更処理を単一関数に統一し、常に決まった順序で実行する。
+// ①未同期確認 → ②未同期なら同期 → ③画面クリア → ④年月更新 → ⑤GAS取得(→⑥localStorage反映はgasPullShift/render内で実施)
+// → ⑦描画。途中で例外が出ても finally で必ず現在選択中の年月で再描画し、中途半端な表示を残さない。
+let monthChangeInProgress = false;
+async function changeMonth(delta) {
+  if (monthChangeInProgress) return; // 連打による多重実行防止
+  monthChangeInProgress = true;
+  try {
+    // ①現在未同期データ確認（切り替え前の月について）
+    const pendingBefore = loadPendingSync();
+    const hasPendingForOldMonth = pendingBefore && pendingBefore.pendingSync
+      && pendingBefore.year === currentYear && pendingBefore.month === currentMonth;
+    // ②未同期があれば同期（失敗しても月変更自体は継続。未同期フラグは残る）
+    if (hasPendingForOldMonth && isShiftAdmin) {
+      try { await gasPushShift(true); } catch(_) { /* noop: 月変更は継続する */ }
+    }
+    // ③現在画面クリア（前月データを新しい月の画面に残さない）
+    clearShiftTableDisplay();
+    // ④選択年月更新（年月を保持する変数はこの currentYear/currentMonth のみ）
+    currentMonth += delta;
+    if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+    if (currentMonth < 1)  { currentMonth = 12; currentYear--; }
+    syncState.version = 0; syncState.lastSavedVersion = 0;
+    syncState.pendingPayload = null;
+    hideShiftUpdateBanner();
+    // ⑤GAS取得 → ⑥localStorage取得（gasPullShift内でsaveData→render、失敗時はローカルのまま）
+    await gasPullShift(false);
+  } catch(e) {
+    console.error('[月変更] エラー', e);
+  } finally {
+    // ⑦画面描画（例外が起きても必ず現在選択中の年月で描画する）
+    render();
+    checkAndNotifyPendingSync();
+    monthChangeInProgress = false;
+  }
 }
-function nextMonth() {
-  currentMonth++; if(currentMonth>12){currentMonth=1;currentYear++;}
-  syncState.version = 0; syncState.lastSavedVersion = 0;
-  render();
-  gasPullShift(false); // 月変更時にGASから最新取得
+function prevMonth() { changeMonth(-1); }
+function nextMonth()  { changeMonth(1); }
+
+function clearShiftTableDisplay() {
+  const table = document.getElementById('shiftTable');
+  if (table) table.innerHTML = '<tbody><tr><td style="padding:16px;color:#94a3b8;">読み込み中...</td></tr></tbody>';
 }
 
 function renderSettings() {
