@@ -799,38 +799,73 @@ const AppState = {
   shiftPollingTimer:   null,
   visibilityHandler:   null,
   focusHandler:        null,
+  tcPollingTimer:      null,
+  tcVisibilityHandler: null,
+  tcFocusHandler:      null,
 };
 
 // ===== 未同期データ管理 =====
 const PENDING_SYNC_KEY = 'shift_pending_sync';
 
+function loadPendingSyncList() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'null');
+    if (!raw) return [];
+    // 旧形式（単一オブジェクト保存）との互換性維持
+    return Array.isArray(raw) ? raw : [raw];
+  } catch { return []; }
+}
+
 function savePendingSync(year, month) {
   try {
-    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify({
+    // 修正: 複数月の未同期を同時に保持できるようにする（他の月の未同期記録を消さない）
+    const list = loadPendingSyncList().filter(p => !(p.year === year && p.month === month));
+    list.push({
       pendingSync: true,
       year:         year,
       month:        month,
       localVersion: syncState.lastSavedVersion,
       savedAt:      new Date().toISOString()
-    }));
+    });
+    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(list));
   } catch(e) { console.error('[pendingSync] 保存失敗', e); }
 }
 
-function clearPendingSync() {
-  localStorage.removeItem(PENDING_SYNC_KEY);
+function clearPendingSync(year, month) {
+  try {
+    if (year === undefined || month === undefined) {
+      localStorage.removeItem(PENDING_SYNC_KEY);
+      return;
+    }
+    const list = loadPendingSyncList().filter(p => !(p.year === year && p.month === month));
+    if (list.length) localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(list));
+    else localStorage.removeItem(PENDING_SYNC_KEY);
+  } catch(e) { console.error('[pendingSync] クリア失敗', e); }
 }
 
+function loadPendingSyncFor(year, month) {
+  return loadPendingSyncList().find(p => p.pendingSync && p.year === year && p.month === month) || null;
+}
+
+// 互換用: 既存の呼び出し元向けに1件だけ返す（先頭の未同期データ）
 function loadPendingSync() {
-  try { return JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'null'); } catch { return null; }
+  const list = loadPendingSyncList();
+  return list.length ? list[0] : null;
 }
 
 function checkAndNotifyPendingSync() {
-  const pending = loadPendingSync();
-  if (!pending || !pending.pendingSync) return;
-  // 同じ年月かつ未解決の未同期データがある場合のみ通知
-  if (pending.year === currentYear && pending.month === currentMonth) {
-    setSyncStatus('failure', `未同期データあり（${pending.year}/${zeroPad(pending.month)} localV${pending.localVersion}）`);
+  const list = loadPendingSyncList().filter(p => p.pendingSync);
+  if (list.length === 0) return;
+  const current = list.find(p => p.year === currentYear && p.month === currentMonth);
+  if (current) {
+    setSyncStatus('failure', `未同期データあり（${current.year}/${zeroPad(current.month)} localV${current.localVersion}）`);
     shiftShowToast('⚠️ 前回同期に失敗したデータがあります。「☁️ 今すぐ同期」を押してください。');
+  }
+  // 修正: 表示中の月以外にも未同期データがあれば見落とさないよう別途通知する
+  const others = list.filter(p => !(p.year === currentYear && p.month === currentMonth));
+  if (others.length > 0) {
+    const label = others.map(p => `${p.year}/${zeroPad(p.month)}`).join('、');
+    shiftShowToast(`⚠️ 他の月にも未同期データがあります（${label}）。該当月を開いて同期してください。`);
   }
 }
 
@@ -856,7 +891,7 @@ function showPendingSyncConflictUI(cloudPayload) {
 
 // ---- 未同期データをJSONファイルとして書き出す ----
 function exportPendingSyncAsJson() {
-  const pending = loadPendingSync();
+  const pending = loadPendingSyncFor(currentYear, currentMonth);
   const yr = pending ? pending.year  : currentYear;
   const mo = pending ? pending.month : currentMonth;
   const localData = loadData(yr, mo);
@@ -1069,10 +1104,7 @@ async function gasPullShift(showMsg = false, applyEvenIfEditing = false) {
     const payload = json.data;
     const isEditing = document.getElementById('modal').classList.contains('open');
     // 未同期データがある場合はクラウドデータで自動上書きしない
-    const hasPendingForMonth = (() => {
-      const p = loadPendingSync();
-      return p && p.pendingSync && p.year === payload.year && p.month === payload.month;
-    })();
+    const hasPendingForMonth = !!loadPendingSyncFor(payload.year, payload.month);
     if (!applyEvenIfEditing && (isEditing || hasPendingForMonth)) {
       syncState.pendingPayload = payload;
       showShiftUpdateBanner();
@@ -1177,6 +1209,8 @@ async function gasPushShift(silent = false) {
     if (json.errorCode === 'VERSION_CONFLICT') {
       setSyncStatus('failure', '競合: 別の端末で更新されています');
       if (btn) { btn.textContent = '☁️ 今すぐ同期'; btn.disabled = false; }
+      // 修正: 競合時も未同期フラグを保存する（気づかずリロード/クラウド再取得しても変更が消えないように）
+      savePendingSync(reqYear, reqMonth);
       if (!silent) {
         showPendingSyncConflictUI(json.data || null);
       } else {
@@ -1200,9 +1234,9 @@ async function gasPushShift(silent = false) {
     syncState.retryCount      = 0;
     if (syncState.retryTimer) { clearTimeout(syncState.retryTimer); syncState.retryTimer = null; }
     // reqYear/reqMonth 分の未同期フラグのみクリア（他月の未同期フラグは残す）
-    const pendingAfterPush = loadPendingSync();
-    if (pendingAfterPush && pendingAfterPush.pendingSync && pendingAfterPush.year === reqYear && pendingAfterPush.month === reqMonth) {
-      clearPendingSync();
+    const pendingAfterPush = loadPendingSyncFor(reqYear, reqMonth);
+    if (pendingAfterPush) {
+      clearPendingSync(reqYear, reqMonth);
     }
 
     if (isStillCurrentMonth) {
@@ -1272,7 +1306,7 @@ function tcGasSaveRecord(key, rec) {
     action: 'saveTimecard', staffId: tcCurrentName, staffName: tcCurrentName,
     facility: rec.fac || '', workDate: key,
     startTime: inT, endTime: outT, breakMinutes: bMin, actualMinutes: actual,
-    note: rec.note || '', updatedAt: new Date().toISOString()
+    note: rec.note || '', updatedAt: rec.updatedAt || new Date().toISOString()
   });
   fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body })
     .then(r => r.json())
@@ -1639,6 +1673,18 @@ function tcInit() {
   const saved = localStorage.getItem('tc_name');
   if (saved && STAFF.includes(saved)) { tcCurrentName = saved; tcShowMain(); }
   else tcShowSetup();
+
+  // 修正: シフトタブを一度も開かなくても、タイムカードの自動同期(45秒ごと/復帰時)が動くようにする
+  if (AppState.tcPollingTimer) clearInterval(AppState.tcPollingTimer);
+  AppState.tcPollingTimer = setInterval(() => tcGasPullRecords(), 45 * 1000);
+
+  if (AppState.tcVisibilityHandler) document.removeEventListener('visibilitychange', AppState.tcVisibilityHandler);
+  AppState.tcVisibilityHandler = () => { if (!document.hidden) tcGasPullRecords(); };
+  document.addEventListener('visibilitychange', AppState.tcVisibilityHandler);
+
+  if (AppState.tcFocusHandler) window.removeEventListener('focus', AppState.tcFocusHandler);
+  AppState.tcFocusHandler = () => tcGasPullRecords();
+  window.addEventListener('focus', AppState.tcFocusHandler);
 }
 
 function tcShowSetup() {
@@ -1799,7 +1845,7 @@ function tcSaveRecord() {
   if (!tcSelectedFac) { tcShowToast('⚠ 訪問施設を選んでください'); return; }
   const key = tcEditingKey || tcDateKey(new Date());
   const recs = tcLoadRecs(tcCurrentName);
-  recs[key] = { fac: tcSelectedFac, in: inT, out: outT||'', break: tcBreakMin };
+  recs[key] = { fac: tcSelectedFac, in: inT, out: outT||'', break: tcBreakMin, updatedAt: new Date().toISOString() };
   tcSaveRecs(tcCurrentName, recs);
   tcGasSaveRecord(key, recs[key]);
   if (tcEditingKey) {
@@ -2131,9 +2177,8 @@ async function changeMonth(delta) {
   monthChangeInProgress = true;
   try {
     // ①現在未同期データ確認（切り替え前の月について）
-    const pendingBefore = loadPendingSync();
-    const hasPendingForOldMonth = pendingBefore && pendingBefore.pendingSync
-      && pendingBefore.year === currentYear && pendingBefore.month === currentMonth;
+    const pendingBefore = loadPendingSyncFor(currentYear, currentMonth);
+    const hasPendingForOldMonth = !!pendingBefore;
     // ②未同期があれば同期（失敗しても月変更自体は継続。未同期フラグは残る）
     if (hasPendingForOldMonth && isShiftAdmin) {
       try { await gasPushShift(true); } catch(_) { /* noop: 月変更は継続する */ }
